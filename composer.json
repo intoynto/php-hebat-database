@@ -1,0 +1,18 @@
+{
+    "name": "intoy/hebat-database",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "Intoy\\HebatDatabase\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "intoynto",
+            "email": "intoynto@gmail.com"
+        }
+    ],
+    "require": {
+        "intoy/hebat-support": "^0.0.2"
+    }
+}
