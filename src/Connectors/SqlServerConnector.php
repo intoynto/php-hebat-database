@@ -2,10 +2,10 @@
 
 declare (strict_types=1);
 
-namespace App\Database\Connectors;
+namespace Intoy\HebatDatabase\Connectors;
 
 use PDO;
-use App\Support\Arr;
+use Intoy\HebatSupport\Arr;
 
 class SqlServerConnector extends Connector
 {
