@@ -1035,6 +1035,25 @@ class Builder
     }
 
 
+
+    /**
+     * Add a raw where clause to the query.
+     *
+     * @param  string  $sql
+     * @param  mixed  $bindings
+     * @param  string  $boolean
+     * @return $this
+     */
+    public function whereRaw($sql, $bindings = [], $boolean = 'and')
+    {
+        $this->wheres[] = ['type' => 'raw', 'sql' => $sql, 'boolean' => $boolean];
+
+        $this->addBinding((array) $bindings, 'where');
+
+        return $this;
+    }
+
+
     /**
      * Add a "group by" clause to the query.
      *

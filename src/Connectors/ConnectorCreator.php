@@ -4,7 +4,13 @@ declare (strict_types=1);
 namespace Intoy\HebatDatabase\Connectors;
 
 use Intoy\HebatDatabase\Connection;
-use Intoy\HebatDatabase\Connections\{MySqlConnection,PostgresConnection,SqlServerConnection,SQLiteConnection};
+use Intoy\HebatDatabase\Connections\{
+    MySqlConnection,
+    PostgresConnection,
+    SqlServerConnection,
+    SQLiteConnection,
+    Oci8Connection,
+};
 use Intoy\HebatSupport\Arr;
 
 class ConnectorCreator 
@@ -102,6 +108,8 @@ class ConnectorCreator
                 return new SQLiteConnection($connection, $database, $prefix, $config);
             case 'sqlsrv':
                 return new SqlServerConnection($connection, $database, $prefix, $config);
+            case 'oracle':
+                return new Oci8Connection($connection, $database, $prefix, $config);
         }
 
         throw new \InvalidArgumentException("Unsupported driver [{$driver}].");
@@ -126,6 +134,7 @@ class ConnectorCreator
             case 'sqlsrv': return new SqlServerConnector;
             case 'pgsql':return new PostgresConnector;
             case 'sqllite':return new SQLiteConnector;
+            case 'oracle':return new OracleConnector;
         }
 
         throw new \InvalidArgumentException("Unsupported driver [{$config['driver']}].");

@@ -13,6 +13,7 @@ use Intoy\HebatDatabase\Query\Builder;
 use Intoy\HebatDatabase\Query\Grammars\{Grammar as QueryGrammar};
 use Intoy\HebatDatabase\Query\Processors\Processor;
 use Intoy\HebatDatabase\QueryException;
+use Intoy\HebatSupport\Arr;
 
 
 class Connection 
@@ -155,6 +156,17 @@ class Connection
     public static function getResolver($driver)
     {
         return static::$resolvers[$driver] ?? null;
+    }
+
+
+    /**
+     * Get the query post processor used by the connection.
+     *
+     * @return \Intoy\HebatDatabase\Query\Processors\Processor
+     */
+    public function getPostProcessor()
+    {
+        return $this->processor;
     }
 
 
@@ -504,5 +516,27 @@ class Connection
         $grammar->setTablePrefix($this->tablePrefix);
 
         return $grammar;
+    }
+
+
+    /**
+     * Get an option from the configuration options.
+     *
+     * @param  string|null  $option
+     * @return mixed
+     */
+    public function getConfig($option = null)
+    {
+        return Arr::get($this->config, $option);
+    }
+
+    /**
+     * Get the PDO driver name.
+     *
+     * @return string
+     */
+    public function getDriverName()
+    {
+        return $this->getConfig('driver');
     }
 }

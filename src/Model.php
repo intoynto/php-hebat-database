@@ -651,8 +651,8 @@ abstract class Model
             'page'=>$page,
             'pagecount'=>$pagecount,
             'limit'=>$limit,
-            'rowcount'=>$jumlah_data,
-            'totalrow'=>count($records),
+            'rowcount'=>count($records),
+            'totalrow'=>$jumlah_data,
             'records'=>$records,
         ];
         return (object)$results;
