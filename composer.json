@@ -13,6 +13,6 @@
         }
     ],
     "require": {
-        "intoy/hebat-support": "^0.0.4"
+        "intoy/hebat-support": "^0.0.5"
     }
 }
