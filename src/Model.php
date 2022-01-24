@@ -590,7 +590,7 @@ abstract class Model
         {
             $order=is_array($order)?$order:[$order];
             $order=array_values($order);
-            $direction=Arr::get($options,'direction');            
+            $direction=(string)Arr::get($options,'direction');
             $direction=strtolower($direction)==='desc'?$direction:'asc';
             foreach($order as $f)
             {
