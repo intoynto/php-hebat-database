@@ -14,11 +14,12 @@ use Intoy\HebatDatabase\Query\Grammars\{Grammar as QueryGrammar};
 use Intoy\HebatDatabase\Query\Processors\Processor;
 use Intoy\HebatDatabase\QueryException;
 use Intoy\HebatSupport\Arr;
+use Intoy\HebatDatabase\Concerns\ManagesTransactions;
 
 
 class Connection 
 {
-    
+    use ManagesTransactions;
     /**
      * @var \PDO|\Closure
      */
@@ -74,6 +75,12 @@ class Connection
      * @var int
      */
     protected $transactions = 0;
+
+
+    /**
+     * The transaction manager instance.
+     */
+    protected $transactionsManager;
 
 
     /**
@@ -518,6 +525,39 @@ class Connection
         return $grammar;
     }
 
+
+    /**
+     * Fire an event for this connection.
+     *
+     * @param  string  $event
+     * @return array|null
+     */
+    protected function fireConnectionEvent($event)
+    {
+        if (!isset($this->events)) {
+            return;
+        }
+
+        //switch ($event) {
+        //    case 'beganTransaction':
+        //        return $this->events->dispatch(new TransactionBeginning($this));
+        //    case 'committed':
+        //        return $this->events->dispatch(new TransactionCommitted($this));
+        //    case 'rollingBack':
+        //        return $this->events->dispatch(new TransactionRolledBack($this));
+        //}
+    }
+
+
+    /**
+     * Get the database connection name.
+     *
+     * @return string|null
+     */
+    public function getName()
+    {
+        return $this->getConfig('name');
+    }
 
     /**
      * Get an option from the configuration options.

@@ -296,7 +296,11 @@ abstract class Model
     public static function where($column, $operator = null, $value = null, $boolean = 'and')
     {
         $obj = new static;
-        $con=$obj->getConnection();        
+        $con=$obj->getConnection();   
+        if(is_array($column))     
+        {
+            return $con->table($obj->getTable())->where($column);
+        }
         return $con->table($obj->getTable())->where($column, $operator, $value, $boolean);
     }
 
