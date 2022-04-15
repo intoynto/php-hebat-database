@@ -580,11 +580,11 @@ abstract class Model
             else {
                 if(is_array($value_param))
                 {
-                    $builder->whereIn($key,$value_param);
+                    $builder->whereIn($val,$value_param);
                 }
                 else 
                 {
-                    $builder->where($key,"=",$value_param);
+                    $builder->where($val,"=",$value_param);
                 }
             }
         });
