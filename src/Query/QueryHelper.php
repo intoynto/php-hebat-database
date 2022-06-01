@@ -57,30 +57,66 @@ class QueryHelper
     {
         if(empty($requestField) || empty($fields)) return;
 
-        $value_param=Arr::get($requestParams,$requestField);
+        $value_field=Arr::get($requestParams,$requestField);
 
-        if(empty($value_param)) return;
+        if(empty($value_field)) return;
 
-        $value_param=strtoupper((string)$value_param);
+        
         if(is_array($fields))
         {
-            foreach(array_values($fields) as $key => $f)
+            if(is_array($value_field))
             {
-                $expresion=new Expression("upper({$f})");    
-                $builder->where($expresion,'=',$value_param);
+                $values=[];
+                foreach(array_values($value_field) as $set)
+                {
+                    if(!empty($set))
+                    {
+                        $set=strtoupper((string)$set);
+                        $values[]=$set;
+                    }       
+                }
+
+                foreach(array_values($fields) as $key => $f)
+                {
+                    $expresion=new Expression("upper({$f})");    
+                    $builder->whereIn($expresion,$values);
+                }                
             }
+            else {
+
+                $value_field=strtoupper((string)$value_field);
+                foreach(array_values($fields) as $key => $f)
+                {
+                    $expresion=new Expression("upper({$f})");    
+                    $builder->where($expresion,'=',$value_field);
+                }
+            }
+            
         }
         else {
-            if($value_param)
+            if(is_array($value_field))
             {
+                $values=[];
+                foreach(array_values($value_field) as $set)
+                {
+                    if(!empty($set))
+                    {
+                        $set=strtoupper((string)$set);
+                        $values[]=$set;
+                    }       
+                }
+
                 $expresion=new Expression("upper({$fields})");    
-                $builder->where($expresion,"=","{$value_param}");
+                $builder->whereIn($expresion,$values);
+                             
             }
+            else {
+                $value_field=strtoupper((string)$value_field);
+                $expresion=new Expression("upper({$fields})");    
+                $builder->where($expresion,"=","{$value_field}");
+            }           
         }       
     }
-
-
-
     /**
      * @param Builder $builder
      * @param array $requestParams

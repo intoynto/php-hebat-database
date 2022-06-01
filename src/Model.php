@@ -541,27 +541,34 @@ abstract class Model
             }
         });
 
-        collect($obj->fields_where_string)->map(function($val,$key) use ($params,$builder)
+        collect($obj->fields_where_string)->map(function($field,$key) use ($params,$builder)
         {
-            $value_param=Arr::get($params,$key);
-            if(empty($value_param)) return;
+            $value_field=Arr::get($params,$key);
+            if(empty($value_field)) return;
 
-
-            $value_param=strtoupper((string)$value_param);
-            if(is_array($val))
+            if(is_array($value_field))
             {
-                foreach(array_values($val) as $f){
-                    $expresion=new Expression("upper({$f})");    
-                    $builder->where($expresion,'=',$value_param);
+                $values=[];
+                foreach(array_values($value_field) as $set)
+                {
+                    if(!empty($set))
+                    {
+                        $set=strtoupper((string)$set);
+                        $values[]=$set;
+                    }       
                 }
-            }
+                $expresion=new Expression("upper({$field})"); 
+                $builder->whereIn($expresion,$values);
+            }          
             else {
-                if($value_param)
-                {                    
-                    $expresion=new Expression("upper({$val})");    
-                    $builder->where($expresion,"=",$value_param);
+                if($value_field)
+                {
+                    $value_field=strtoupper((string)$value_field);       
+                    $expresion=new Expression("upper({$field})");    
+                    $builder->where($expresion,"=",$value_field);
                 }
             }
+            
         });
 
         collect($obj->fields_search_int)->map(function($val,$key) use ($params,$builder)
