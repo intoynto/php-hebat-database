@@ -512,7 +512,7 @@ abstract class Model
      * @param array $options ['limit'=>20,'order'=>[],'direction'=>'asc|desc']
      * @return mixed
      */
-    public static function queryParamsFromBuilder(Builder $builder, $model, array $params, array $options=[])
+    public static function queryParamsFromBuilder(Builder &$builder, $model, array $params, array $options=[])
     {
         $obj=$model;  
         $con=$obj->connection();
