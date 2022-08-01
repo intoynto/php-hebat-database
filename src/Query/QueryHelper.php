@@ -12,6 +12,25 @@ use Intoy\HebatSupport\Arr;
 class QueryHelper 
 {
     /**
+     * Check is Valueable variable
+     * @param mixed $var
+     * @return bool
+     */
+    private static function isValueable($val)
+    {
+        if(is_array($val)) return count($val)>0;
+        // check if not object
+        elseif(!is_object($val))
+        {
+            $val=trim((string)$val);
+            return strlen($val)>0;
+        }
+        else {
+            return false;
+        }
+    }
+
+    /**
      * @param Builder $builder
      * @param array $requestParams
      * @param string $requestField
@@ -23,7 +42,8 @@ class QueryHelper
         if(empty($requestField) || empty($fields)) return;
 
         $value_param=Arr::get($requestParams,$requestField);
-        if(empty($value_param)) return;
+
+        if(!static::isValueable($value_param)) return;
 
         $value_param=strtoupper((string)$value_param);
         if(is_array($fields))
@@ -41,8 +61,7 @@ class QueryHelper
                 $expresion=new Expression("upper({$fields})");    
                 $builder->where($expresion,"like","%{$value_param}%");
             }
-        }
-       
+        }       
     }
 
 
@@ -59,8 +78,7 @@ class QueryHelper
 
         $value_field=Arr::get($requestParams,$requestField);
 
-        if(empty($value_field)) return;
-
+        if(!static::isValueable($value_field)) return;
         
         if(is_array($fields))
         {
@@ -69,7 +87,7 @@ class QueryHelper
                 $values=[];
                 foreach(array_values($value_field) as $set)
                 {
-                    if(!empty($set))
+                    if(static::isValueable($set))
                     {
                         $set=strtoupper((string)$set);
                         $values[]=$set;
@@ -129,7 +147,8 @@ class QueryHelper
         if(empty($requestField) || empty($fields)) return;
 
         $value_param=Arr::get($requestParams,$requestField);
-        if(empty($value_param)) return;
+
+        if(!static::isValueable($value_param)) return;
 
         if(is_array($fields))
         {
