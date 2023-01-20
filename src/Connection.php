@@ -70,6 +70,21 @@ class Connection
 
 
     /**
+     * The schema grammar implementation.
+     *
+     * @var \Intoy\HebatDatabase\Query\Grammar
+     */
+    protected $schemaGrammar;
+
+
+    /**
+     * The event dispatcher instance.
+     *
+     */
+    protected $events;
+
+
+    /**
      * The number of active transactions.
      *
      * @var int
@@ -89,6 +104,12 @@ class Connection
      * @var array
      */
     protected static $resolvers = [];
+
+
+    /**
+     * The instance of Doctrine connection.
+     */
+    protected $doctrineConnection;
 
     /**
      * Constructor
@@ -128,6 +149,28 @@ class Connection
     protected function getDefaultGrammar()
     {
         return new QueryGrammar();
+    }
+
+
+    /**
+     * Set the schema grammar to the default implementation.
+     *
+     * @return void
+     */
+    public function useDefaultSchemaGrammar()
+    {
+        $this->schemaGrammar = $this->getDefaultSchemaGrammar();
+    }
+
+
+    /**
+     * Get the default schema grammar instance.
+     *
+     * @return \Intoy\HebatDatabase\Query\Grammar
+     */
+    protected function getDefaultSchemaGrammar()
+    {
+        //
     }
 
 

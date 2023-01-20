@@ -3,7 +3,6 @@ declare (strict_types=1);
 
 namespace Intoy\HebatDatabase\Connections;
 
-use PDO;
 use Intoy\HebatDatabase\Connection;
 use Intoy\HebatDatabase\Query\Grammars\SqlServerGrammar as Grammar;
 use Intoy\HebatDatabase\Query\Processors\SqlServerProcessor;

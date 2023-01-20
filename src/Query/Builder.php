@@ -147,6 +147,14 @@ class Builder
 
 
     /**
+     * Indicates whether row locking is being used.
+     *
+     * @var string|bool
+     */
+    public $lock;
+
+
+    /**
      * Connection
      * @var Connection
      */

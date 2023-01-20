@@ -211,7 +211,8 @@ class Oci8Connection extends Connection
      */
     protected function getDoctrineDriver()
     {
-        return class_exists(Version::class) ? new DoctrineDriver : new Oci8Driver();
+        //return class_exists(Version::class) ? new DoctrineDriver : new Oci8Driver();
+        return new Oci8Driver();
     }
 
     /**
