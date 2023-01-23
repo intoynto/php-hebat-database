@@ -6,6 +6,7 @@ use Intoy\HebatDatabase\Query\Builder;
 use Intoy\HebatDatabase\Query\Expression;
 use Intoy\HebatDatabase\Query\Grammars\OracleGrammar;
 use Intoy\HebatDatabase\Query\Processors\OracleProcessor;
+use Intoy\HebatSupport\Interfaces\Arrayable;
 
 class OracleBuilder extends Builder
 {
@@ -15,6 +16,7 @@ class OracleBuilder extends Builder
      * @param  array  $columns
      * @return array
      */
+    /*
     protected function runPaginationCountQuery($columns = ['*'])
     {
         if ($this->groups || $this->havings) {
@@ -38,13 +40,14 @@ class OracleBuilder extends Builder
             ->setAggregate('count', $this->withoutSelectAliases($columns))
             ->get()->all();
     }
-
+    */
     /**
      * Get the count of the total records for the paginator.
      *
      * @param  array  $columns
      * @return int
      */
+    /*
     public function getCountForPagination($columns = ['*'])
     {
         $results = $this->runPaginationCountQuery($columns);
@@ -60,6 +63,7 @@ class OracleBuilder extends Builder
 
         return (int) array_change_key_case((array) $results[0])['aggregate'];
     }
+    */
 
     /**
      * Insert a new record and get the value of the primary key.

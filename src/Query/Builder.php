@@ -11,6 +11,7 @@ use Intoy\HebatSupport\Interfaces\Arrayable;
 use Intoy\HebatDatabase\Query\Grammars\Grammar;
 use Intoy\HebatDatabase\Query\Processors\Processor;
 use Intoy\HebatDatabase\Connection;
+use Intoy\HebatDatabase\Contacts\Pagination\Paginator;
 
 class Builder 
 {
@@ -42,6 +43,13 @@ class Builder
         '~', '~*', '!~', '!~*', 'similar to',
         'not similar to', 'not ilike', '~~*', '!~~*',
     ];
+
+    /**
+     * Whether to use write pdo for the select.
+     *
+     * @var bool
+     */
+    public $useWritePdo = false;
 
     /**
      * An aggregate function and column to be run.
@@ -136,6 +144,22 @@ class Builder
      * @var array
      */
     public $unions;
+
+
+    /**
+     * The maximum number of union records to return.
+     *
+     * @var int
+     */
+    public $unionLimit;
+
+
+    /**
+     * The number of union records to skip.
+     *
+     * @var int
+     */
+    public $unionOffset;
 
 
     /**
@@ -1702,7 +1726,6 @@ class Builder
     }
 
 
-
     /**
      * Run the query as a "select" statement against the connection.
      *
@@ -1716,9 +1739,7 @@ class Builder
             //!$this->useWritePdo
         );
     }
-
-
-
+     
     /**
      * Execute the given callback while selecting the given columns.
      *
