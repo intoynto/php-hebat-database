@@ -3,7 +3,7 @@
 namespace Intoy\HebatDatabase\Oci8\Schema;
 
 use Intoy\HebatDatabase\Connection;
-use Intoy\HebatDatabase\Oci8\Schema\Blueprint;
+use Intoy\HebatDatabase\Oci8\Schema\OracleBlueprint as BluePrint;
 
 class OracleAutoIncrementHelper
 {

@@ -4,8 +4,9 @@ namespace Intoy\HebatDatabase\Oci8\Schema;
 
 use Closure;
 use Intoy\HebatDatabase\Connection;
-use Intoy\HebatDatabase\Query\Builder;
-use Intoy\HebatDatabase\Query\Grammars\OracleGrammar;
+use Intoy\HebatDatabase\Schema\Builder;
+use Intoy\HebatDatabase\Schema\Grammars\OracleGrammar;
+use Intoy\HebatDatabase\Oci8\Schema\OracleBlueprint as BluePrint;
 
 class OracleBuilder extends Builder
 {
@@ -102,27 +103,17 @@ class OracleBuilder extends Builder
         parent::drop($table);
     }
 
-    /**
-     * Drop all tables from the database.
-     *
-     * @return void
-     */
-    public function dropAllTables()
-    {
-        $this->connection->statement($this->grammar->compileDropAllTables());
-    }
-
-    /**
+     /**
      * Indicate that the table should be dropped if it exists.
      *
      * @param  string  $table
-     * @return Fluent
+     * @return \Intoy\HebatSupport\Fluent
      */
     public function dropIfExists($table)
     {
         $this->helper->dropAutoIncrementObjects($table);
         parent::dropIfExists($table);
-    }
+    }    
 
     /**
      * Determine if the given table exists.

@@ -6,7 +6,9 @@ namespace Intoy\HebatDatabase\Connections;
 use PDO;
 use Intoy\HebatDatabase\Connection;
 use Intoy\HebatDatabase\Query\Grammars\PostgresGrammar as Grammar;
+use Intoy\HebatDatabase\Schema\Grammars\PostgresGrammar as SchemaGrammar;
 use Intoy\HebatDatabase\Query\Processors\PostgresProcessor;
+use Intoy\HebatDatabase\Schema\PostgresBuilder;
 
 class PostgresConnection extends Connection
 {
@@ -42,6 +44,30 @@ class PostgresConnection extends Connection
     protected function getDefaultGrammar()
     {
         return $this->withTablePrefix(new Grammar());
+    }
+
+    /**
+     * Get a schema builder instance for the connection.
+     *
+     * @return \Intoy\HebatDatabase\Schema\PostgresBuilder
+     */
+    public function getSchemaBuilder()
+    {
+        if (is_null($this->schemaGrammar)) {
+            $this->useDefaultSchemaGrammar();
+        }
+
+        return new PostgresBuilder($this);
+    }
+
+     /**
+     * Get the default schema grammar instance.
+     *
+     * @return \Intoy\HebatDatabase\Schema\Grammars\Grammar
+     */
+    protected function getDefaultSchemaGrammar()
+    {
+        return $this->withTablePrefix(new SchemaGrammar);
     }
 
 

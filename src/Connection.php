@@ -15,6 +15,7 @@ use Intoy\HebatDatabase\Query\Processors\Processor;
 use Intoy\HebatDatabase\QueryException;
 use Intoy\HebatSupport\Arr;
 use Intoy\HebatDatabase\Concerns\ManagesTransactions;
+use Intoy\HebatDatabase\Schema\Builder as SchemaBuilder;
 
 
 class Connection 
@@ -160,19 +161,7 @@ class Connection
     public function useDefaultSchemaGrammar()
     {
         $this->schemaGrammar = $this->getDefaultSchemaGrammar();
-    }
-
-
-    /**
-     * Get the default schema grammar instance.
-     *
-     * @return \Intoy\HebatDatabase\Query\Grammar
-     */
-    protected function getDefaultSchemaGrammar()
-    {
-        //
-    }
-
+    }   
 
 
     /**
@@ -217,6 +206,55 @@ class Connection
     public function getPostProcessor()
     {
         return $this->processor;
+    }
+
+
+    /**
+     * Get the schema grammar used by the connection.
+     *
+     * @return \Intoy\HebatDataBase\Schema\Grammars\Grammar
+     */
+    public function getSchemaGrammar()
+    {
+        return $this->schemaGrammar;
+    }
+
+    /**
+     * Set the schema grammar used by the connection.
+     *
+     * @param  \Intoy\HebatDatabase\Schema\Grammars\Grammar  $grammar
+     * @return $this
+     */
+    public function setSchemaGrammar($grammar)
+    {
+        $this->schemaGrammar = $grammar;
+
+        return $this;
+    }
+
+    /**
+     * Get the default schema grammar instance.
+     *
+     * @return \Intoy\HebatDatabase\Schema\Grammars\Grammar
+     */
+    protected function getDefaultSchemaGrammar()
+    {
+        //
+    }
+
+
+    /**
+     * Get a schema builder instance for the connection.
+     *
+     * @return \Intoy\HebatDatabase\Schema\Builder
+     */
+    public function getSchemaBuilder()
+    {
+        if (is_null($this->schemaGrammar)) {
+            $this->useDefaultSchemaGrammar();
+        }
+
+        return new SchemaBuilder($this);
     }
 
 
@@ -558,10 +596,10 @@ class Connection
     /**
      * Set the table prefix and return the grammar.
      *
-     * @param  QueryGrammar  $grammar
-     * @return QueryGrammar
+     * @param  Grammar  $grammar
+     * @return Grammar
      */
-    public function withTablePrefix(QueryGrammar $grammar)
+    public function withTablePrefix(Grammar $grammar)
     {
         $grammar->setTablePrefix($this->tablePrefix);
 
@@ -621,5 +659,15 @@ class Connection
     public function getDriverName()
     {
         return $this->getConfig('driver');
+    }
+
+    /**
+     * Get the name of the connected database.
+     *
+     * @return string
+     */
+    public function getDatabaseName()
+    {
+        return $this->database;
     }
 }

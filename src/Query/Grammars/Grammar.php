@@ -6,16 +6,23 @@ namespace Intoy\HebatDatabase\Query\Grammars;
 
 use Intoy\HebatSupport\Arr;
 use Intoy\HebatSupport\Str;
-use Intoy\HebatDatabase\Query\Grammar as BaseGrammar;
+use Intoy\HebatDatabase\Grammar as BaseGrammar;
 use Intoy\HebatDatabase\Query\Builder;
 use Intoy\HebatDatabase\Query\JoinClause;
 
 class Grammar extends BaseGrammar
 {
     /**
-     * The components that make up a select clause.
+     * The grammar specific operators.
      *
      * @var array
+     */
+    protected $operators = [];
+
+    /**
+     * The components that make up a select clause.
+     *
+     * @var string[]
      */
     protected $selectComponents = [
         'aggregate',
@@ -32,9 +39,90 @@ class Grammar extends BaseGrammar
     ];
 
     /**
+     * Compile a select query into SQL.
+     *
+     * @param  Builder  $query
+     * @return string
+     */
+    public function compileSelect(Builder $query)
+    {
+        if (($query->unions || $query->havings) && $query->aggregate) {
+            return $this->compileUnionAggregate($query);
+        }
+
+        // If the query does not have any columns set, we'll set the columns to the
+        // * character to just get all of the columns from the database. Then we
+        // can build the query and concatenate all the pieces together as one.
+        $original = $query->columns;
+
+        if (is_null($query->columns)) {
+            $query->columns = ['*'];
+        }
+
+        // To compile the query, we'll spin through each component of the query and
+        // see if that component exists. If it does we'll just call the compiler
+        // function for the component which is responsible for making the SQL.
+        $sql = trim($this->concatenate(
+            $this->compileComponents($query))
+        );
+
+        if ($query->unions) {
+            $sql = $this->wrapUnion($sql).' '.$this->compileUnions($query);
+        }
+
+        $query->columns = $original;
+
+        return $sql;
+    }
+
+    /**
+     * Compile the components necessary for a select clause.
+     *
+     * @param  Builder  $query
+     * @return array
+     */
+    protected function compileComponents(Builder $query)
+    {
+        $sql = [];
+
+        foreach ($this->selectComponents as $component) {
+            if (isset($query->$component)) {
+                $method = 'compile'.ucfirst($component);
+
+                $sql[$component] = $this->$method($query, $query->$component);
+            }
+        }
+
+        return $sql;
+    }
+
+    /**
+     * Compile an aggregated select clause.
+     *
+     * @param  Builder  $query
+     * @param  array  $aggregate
+     * @return string
+     */
+    protected function compileAggregate(Builder $query, $aggregate)
+    {
+        $column = $this->columnize($aggregate['columns']);
+
+        // If the query has a "distinct" constraint and we're not asking for all columns
+        // we need to prepend "distinct" onto the column name so that the query takes
+        // it into account when it performs the aggregating operations on the data.
+        if (is_array($query->distinct)) {
+            $column = 'distinct '.$this->columnize($query->distinct);
+        } elseif ($query->distinct && $column !== '*') {
+            $column = 'distinct '.$column;
+        }
+
+        return 'select '.$aggregate['function'].'('.$column.') as aggregate';
+    }
+
+    /**
      * Compile the "select *" portion of the query.
      *
-     * @param  Builder  $builder
+     * @param  Builder  $query
      * @param  array  $columns
      * @return string|null
      */
@@ -43,7 +131,7 @@ class Grammar extends BaseGrammar
         // If the query is actually performing an aggregating select, we will let that
         // compiler handle the building of the select clauses, as it will need some
         // more syntax that is best handled by that function to keep things neat.
-        if (!is_null($query->aggregate)) {
+        if (! is_null($query->aggregate)) {
             return;
         }
 
@@ -52,16 +140,14 @@ class Grammar extends BaseGrammar
         } else {
             $select = 'select ';
         }
-        
+
         return $select.$this->columnize($columns);
-    } 
-
-
+    }
 
     /**
      * Compile the "from" portion of the query.
      *
-     * @param  Builder $query
+     * @param  Builder  $query
      * @param  string  $table
      * @return string
      */
@@ -70,20 +156,19 @@ class Grammar extends BaseGrammar
         return 'from '.$this->wrapTable($table);
     }
 
-
     /**
      * Compile the "join" portions of the query.
      *
-     * @param  Builder $builder
+     * @param  Builder  $query
      * @param  array  $joins
      * @return string
      */
-    protected function compileJoins(Builder $builder, $joins)
+    protected function compileJoins(Builder $query, $joins)
     {
-        return collect($joins)->map(function ($join) use ($builder) {
+        return collect($joins)->map(function ($join) use ($query) {
             $table = $this->wrapTable($join->table);
 
-            $nestedJoins = is_null($join->joins) ? '' : ' '.$this->compileJoins($builder, $join->joins);
+            $nestedJoins = is_null($join->joins) ? '' : ' '.$this->compileJoins($query, $join->joins);
 
             $tableAndNestedJoins = is_null($join->joins) ? $table : '('.$table.$nestedJoins.')';
 
@@ -91,14 +176,13 @@ class Grammar extends BaseGrammar
         })->implode(' ');
     }
 
-
     /**
      * Compile the "where" portions of the query.
      *
      * @param  Builder  $query
      * @return string
      */
-    protected function compileWheres(Builder $query)
+    public function compileWheres(Builder $query)
     {
         // Each type of where clauses has its own compiler function which is responsible
         // for actually creating the where clauses SQL. This helps keep the code nice
@@ -117,7 +201,6 @@ class Grammar extends BaseGrammar
         return '';
     }
 
-
     /**
      * Get an array of all the where clauses for the query.
      *
@@ -131,11 +214,10 @@ class Grammar extends BaseGrammar
         })->all();
     }
 
-
     /**
      * Format the where clause statements into one string.
      *
-     * @param  Builder $query
+     * @param  Builder  $query
      * @param  array  $sql
      * @return string
      */
@@ -143,9 +225,8 @@ class Grammar extends BaseGrammar
     {
         $conjunction = $query instanceof JoinClause ? 'on' : 'where';
 
-        return $conjunction . ' ' . $this->removeLeadingBoolean(implode(' ', $sql));
+        return $conjunction.' '.$this->removeLeadingBoolean(implode(' ', $sql));
     }
-
 
     /**
      * Compile a raw where clause.
@@ -159,19 +240,407 @@ class Grammar extends BaseGrammar
         return $where['sql'];
     }
 
+    /**
+     * Compile a basic where clause.
+     *
+     * @param  Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function whereBasic(Builder $query, $where)
+    {
+        $value = $this->parameter($where['value']);
+
+        $operator = str_replace('?', '??', $where['operator']);
+
+        return $this->wrap($where['column']).' '.$operator.' '.$value;
+    }
+
+    /**
+     * Compile a "where in" clause.
+     *
+     * @param  Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function whereIn(Builder $query, $where)
+    {
+        if (! empty($where['values'])) {
+            return $this->wrap($where['column']).' in ('.$this->parameterize($where['values']).')';
+        }
+
+        return '0 = 1';
+    }
+
+    /**
+     * Compile a "where not in" clause.
+     *
+     * @param  Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function whereNotIn(Builder $query, $where)
+    {
+        if (! empty($where['values'])) {
+            return $this->wrap($where['column']).' not in ('.$this->parameterize($where['values']).')';
+        }
+
+        return '1 = 1';
+    }
+
+    /**
+     * Compile a "where not in raw" clause.
+     *
+     * For safety, whereIntegerInRaw ensures this method is only used with integer values.
+     *
+     * @param  Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function whereNotInRaw(Builder $query, $where)
+    {
+        if (! empty($where['values'])) {
+            return $this->wrap($where['column']).' not in ('.implode(', ', $where['values']).')';
+        }
+
+        return '1 = 1';
+    }
+
+    /**
+     * Compile a "where in raw" clause.
+     *
+     * For safety, whereIntegerInRaw ensures this method is only used with integer values.
+     *
+     * @param  Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function whereInRaw(Builder $query, $where)
+    {
+        if (! empty($where['values'])) {
+            return $this->wrap($where['column']).' in ('.implode(', ', $where['values']).')';
+        }
+
+        return '0 = 1';
+    }
+
+    /**
+     * Compile a "where null" clause.
+     *
+     * @param  Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function whereNull(Builder $query, $where)
+    {
+        return $this->wrap($where['column']).' is null';
+    }
+
+    /**
+     * Compile a "where not null" clause.
+     *
+     * @param  Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function whereNotNull(Builder $query, $where)
+    {
+        return $this->wrap($where['column']).' is not null';
+    }
+
+    /**
+     * Compile a "between" where clause.
+     *
+     * @param  Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function whereBetween(Builder $query, $where)
+    {
+        $between = $where['not'] ? 'not between' : 'between';
+
+        $min = $this->parameter(reset($where['values']));
+
+        $max = $this->parameter(end($where['values']));
+
+        return $this->wrap($where['column']).' '.$between.' '.$min.' and '.$max;
+    }
+
+    /**
+     * Compile a "between" where clause.
+     *
+     * @param  Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function whereBetweenColumns(Builder $query, $where)
+    {
+        $between = $where['not'] ? 'not between' : 'between';
+
+        $min = $this->wrap(reset($where['values']));
+
+        $max = $this->wrap(end($where['values']));
+
+        return $this->wrap($where['column']).' '.$between.' '.$min.' and '.$max;
+    }
+
+    /**
+     * Compile a "where date" clause.
+     *
+     * @param  Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function whereDate(Builder $query, $where)
+    {
+        return $this->dateBasedWhere('date', $query, $where);
+    }
+
+    /**
+     * Compile a "where time" clause.
+     *
+     * @param  Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function whereTime(Builder $query, $where)
+    {
+        return $this->dateBasedWhere('time', $query, $where);
+    }
+
+    /**
+     * Compile a "where day" clause.
+     *
+     * @param  Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function whereDay(Builder $query, $where)
+    {
+        return $this->dateBasedWhere('day', $query, $where);
+    }
+
+    /**
+     * Compile a "where month" clause.
+     *
+     * @param  Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function whereMonth(Builder $query, $where)
+    {
+        return $this->dateBasedWhere('month', $query, $where);
+    }
+
+    /**
+     * Compile a "where year" clause.
+     *
+     * @param  Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function whereYear(Builder $query, $where)
+    {
+        return $this->dateBasedWhere('year', $query, $where);
+    }
+
+    /**
+     * Compile a date based where clause.
+     *
+     * @param  string  $type
+     * @param  Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function dateBasedWhere($type, Builder $query, $where)
+    {
+        $value = $this->parameter($where['value']);
+
+        return $type.'('.$this->wrap($where['column']).') '.$where['operator'].' '.$value;
+    }
+
+    /**
+     * Compile a where clause comparing two columns.
+     *
+     * @param  Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function whereColumn(Builder $query, $where)
+    {
+        return $this->wrap($where['first']).' '.$where['operator'].' '.$this->wrap($where['second']);
+    }
+
+    /**
+     * Compile a nested where clause.
+     *
+     * @param  Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function whereNested(Builder $query, $where)
+    {
+        // Here we will calculate what portion of the string we need to remove. If this
+        // is a join clause query, we need to remove the "on" portion of the SQL and
+        // if it is a normal query we need to take the leading "where" of queries.
+        $offset = $query instanceof JoinClause ? 3 : 6;
+
+        return '('.substr($this->compileWheres($where['query']), $offset).')';
+    }
+
+    /**
+     * Compile a where condition with a sub-select.
+     *
+     * @param  Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function whereSub(Builder $query, $where)
+    {
+        $select = $this->compileSelect($where['query']);
+
+        return $this->wrap($where['column']).' '.$where['operator']." ($select)";
+    }
+
+    /**
+     * Compile a where exists clause.
+     *
+     * @param  Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function whereExists(Builder $query, $where)
+    {
+        return 'exists ('.$this->compileSelect($where['query']).')';
+    }
+
+    /**
+     * Compile a where exists clause.
+     *
+     * @param  Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function whereNotExists(Builder $query, $where)
+    {
+        return 'not exists ('.$this->compileSelect($where['query']).')';
+    }
+
+    /**
+     * Compile a where row values condition.
+     *
+     * @param  Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function whereRowValues(Builder $query, $where)
+    {
+        $columns = $this->columnize($where['columns']);
+
+        $values = $this->parameterize($where['values']);
+
+        return '('.$columns.') '.$where['operator'].' ('.$values.')';
+    }
+
+    /**
+     * Compile a "where JSON boolean" clause.
+     *
+     * @param  Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function whereJsonBoolean(Builder $query, $where)
+    {
+        $column = $this->wrapJsonBooleanSelector($where['column']);
+
+        $value = $this->wrapJsonBooleanValue(
+            $this->parameter($where['value'])
+        );
+
+        return $column.' '.$where['operator'].' '.$value;
+    }
+
+    /**
+     * Compile a "where JSON contains" clause.
+     *
+     * @param  Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function whereJsonContains(Builder $query, $where)
+    {
+        $not = $where['not'] ? 'not ' : '';
+
+        return $not.$this->compileJsonContains(
+            $where['column'], $this->parameter($where['value'])
+        );
+    }
+
+    /**
+     * Compile a "JSON contains" statement into SQL.
+     *
+     * @param  string  $column
+     * @param  string  $value
+     * @return string
+     *
+     * @throws \RuntimeException
+     */
+    protected function compileJsonContains($column, $value)
+    {
+        throw new \RuntimeException('This database engine does not support JSON contains operations.');
+    }
+
+    /**
+     * Prepare the binding for a "JSON contains" statement.
+     *
+     * @param  mixed  $binding
+     * @return string
+     */
+    public function prepareBindingForJsonContains($binding)
+    {
+        return json_encode($binding);
+    }
+
+    /**
+     * Compile a "where JSON length" clause.
+     *
+     * @param  Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function whereJsonLength(Builder $query, $where)
+    {
+        return $this->compileJsonLength(
+            $where['column'], $where['operator'], $this->parameter($where['value'])
+        );
+    }
+
+    /**
+     * Compile a "JSON length" statement into SQL.
+     *
+     * @param  string  $column
+     * @param  string  $operator
+     * @param  string  $value
+     * @return string
+     *
+     * @throws \RuntimeException
+     */
+    protected function compileJsonLength($column, $operator, $value)
+    {
+        throw new \RuntimeException('This database engine does not support JSON length operations.');
+    }
 
     /**
      * Compile the "group by" portions of the query.
      *
-     * @param  Builder $builder
+     * @param  Builder  $query
      * @param  array  $groups
      * @return string
      */
-    protected function compileGroups(Builder $builder, $groups)
+    protected function compileGroups(Builder $query, $groups)
     {
-        return 'group by ' . $this->columnize($groups);
+        return 'group by '.$this->columnize($groups);
     }
-
 
     /**
      * Compile the "having" portions of the query.
@@ -183,9 +652,9 @@ class Grammar extends BaseGrammar
     protected function compileHavings(Builder $query, $havings)
     {
         $sql = implode(' ', array_map([$this, 'compileHaving'], $havings));
+
         return 'having '.$this->removeLeadingBoolean($sql);
     }
-
 
     /**
      * Compile a single having clause.
@@ -199,14 +668,13 @@ class Grammar extends BaseGrammar
         // without doing any more processing on it. Otherwise, we will compile the
         // clause into SQL based on the components that make it up from builder.
         if ($having['type'] === 'Raw') {
-            return $having['boolean'] . ' ' . $having['sql'];
+            return $having['boolean'].' '.$having['sql'];
         } elseif ($having['type'] === 'between') {
             return $this->compileHavingBetween($having);
         }
 
         return $this->compileBasicHaving($having);
     }
-
 
     /**
      * Compile a basic having clause.
@@ -220,7 +688,7 @@ class Grammar extends BaseGrammar
 
         $parameter = $this->parameter($having['value']);
 
-        return $having['boolean'] . ' ' . $column . ' ' . $having['operator'] . ' ' . $parameter;
+        return $having['boolean'].' '.$column.' '.$having['operator'].' '.$parameter;
     }
 
     /**
@@ -242,7 +710,138 @@ class Grammar extends BaseGrammar
         return $having['boolean'].' '.$column.' '.$between.' '.$min.' and '.$max;
     }
 
+    /**
+     * Compile the "order by" portions of the query.
+     *
+     * @param  Builder  $query
+     * @param  array  $orders
+     * @return string
+     */
+    protected function compileOrders(Builder $query, $orders)
+    {
+        if (! empty($orders)) {
+            return 'order by '.implode(', ', $this->compileOrdersToArray($query, $orders));
+        }
 
+        return '';
+    }
+
+    /**
+     * Compile the query orders to an array.
+     *
+     * @param  Builder  $query
+     * @param  array  $orders
+     * @return array
+     */
+    protected function compileOrdersToArray(Builder $query, $orders)
+    {
+        return array_map(function ($order) {
+            return $order['sql'] ?? $this->wrap($order['column']).' '.$order['direction'];
+        }, $orders);
+    }
+
+    /**
+     * Compile the random statement into SQL.
+     *
+     * @param  string  $seed
+     * @return string
+     */
+    public function compileRandom($seed)
+    {
+        return 'RANDOM()';
+    }
+
+    /**
+     * Compile the "limit" portions of the query.
+     *
+     * @param  Builder  $query
+     * @param  int  $limit
+     * @return string
+     */
+    protected function compileLimit(Builder $query, $limit)
+    {
+        return 'limit '.(int) $limit;
+    }
+
+    /**
+     * Compile the "offset" portions of the query.
+     *
+     * @param  Builder  $query
+     * @param  int  $offset
+     * @return string
+     */
+    protected function compileOffset(Builder $query, $offset)
+    {
+        return 'offset '.(int) $offset;
+    }
+
+    /**
+     * Compile the "union" queries attached to the main query.
+     *
+     * @param  Builder  $query
+     * @return string
+     */
+    protected function compileUnions(Builder $query)
+    {
+        $sql = '';
+
+        foreach ($query->unions as $union) {
+            $sql .= $this->compileUnion($union);
+        }
+
+        if (! empty($query->unionOrders)) {
+            $sql .= ' '.$this->compileOrders($query, $query->unionOrders);
+        }
+
+        if (isset($query->unionLimit)) {
+            $sql .= ' '.$this->compileLimit($query, $query->unionLimit);
+        }
+
+        if (isset($query->unionOffset)) {
+            $sql .= ' '.$this->compileOffset($query, $query->unionOffset);
+        }
+
+        return ltrim($sql);
+    }
+
+    /**
+     * Compile a single union statement.
+     *
+     * @param  array  $union
+     * @return string
+     */
+    protected function compileUnion(array $union)
+    {
+        $conjunction = $union['all'] ? ' union all ' : ' union ';
+
+        return $conjunction.$this->wrapUnion($union['query']->toSql());
+    }
+
+    /**
+     * Wrap a union subquery in parentheses.
+     *
+     * @param  string  $sql
+     * @return string
+     */
+    protected function wrapUnion($sql)
+    {
+        return '('.$sql.')';
+    }
+
+    /**
+     * Compile a union aggregate query into SQL.
+     *
+     * @param  Builder  $query
+     * @return string
+     */
+    protected function compileUnionAggregate(Builder $query)
+    {
+        $sql = $this->compileAggregate($query, $query->aggregate);
+
+        $query->aggregate = null;
+
+        return $sql.' from ('.$this->compileSelect($query).') as '.$this->wrapTable('temp_table');
+    }
 
     /**
      * Compile an exists statement into SQL.
@@ -255,231 +854,6 @@ class Grammar extends BaseGrammar
         $select = $this->compileSelect($query);
 
         return "select exists({$select}) as {$this->wrap('exists')}";
-    }   
-
-
-    /**
-     * Remove the leading boolean from a statement.
-     *
-     * @param  string  $value
-     * @return string
-     */
-    protected function removeLeadingBoolean($value)
-    {
-        return preg_replace('/and |or /i', '', $value, 1);
-    }
-
-
-
-    /**
-     * Compile a where clause comparing two columns..
-     *
-     * @param  Builder  $builder
-     * @param  array  $where
-     * @return string
-     */
-    protected function whereColumn(Builder $builder, $where)
-    {
-        return $this->wrap($where['first']) . ' ' . $where['operator'] . ' ' . $this->wrap($where['second']);
-    }
-
-
-    /**
-     * Compile a basic where clause.
-     *
-     * @param  Builder  $query
-     * @param  array    $where
-     * @return string
-     */
-    protected function whereBasic(Builder $query, $where)
-    {
-        $value = $this->parameter($where['value']);
-
-        return $this->wrap($where['column']).' '.$where['operator'].' '.$value;
-    }
-
-
-    /**
-     * Compile a nested where clause.
-     *
-     * @param  Builder  $query
-     * @param  array  $where
-     * @return string
-     */
-    protected function whereNested(Builder $query, $where)
-    {
-        // Here we will calculate what portion of the string we need to remove. If this
-        // is a join clause query, we need to remove the "on" portion of the SQL and
-        // if it is a normal query we need to take the leading "where" of queries.
-        $offset = $query instanceof JoinClause ? 3 : 6;
-
-        return '('.substr($this->compileWheres($where['query']), $offset).')';
-    }
-
-    /**
-     * Compile a "where null" clause.
-     *
-     * @param  Builder  $query
-     * @param  array  $where
-     * @return string
-     */
-    protected function whereNull(Builder $query, $where)
-    {
-        return $this->wrap($where['column']) . ' is null';
-    }
-
-
-    /**
-     * Compile a "where not null" clause.
-     *
-     * @param  Builder  $query
-     * @param  array  $where
-     * @return string
-     */
-    protected function whereNotNull(Builder $query, $where)
-    {
-        return $this->wrap($where['column']) . ' is not null';
-    }
-
-    /**
-     * Compile a "where day" clause.
-     *
-     * @param  Builder  $query
-     * @param  array  $where
-     * @return string
-     */
-    protected function whereDay(Builder $query, $where)
-    {
-        return $this->dateBasedWhere('day', $query, $where);
-    }
-
-
-    /**
-     * Compile a "where date" clause.
-     *
-     * @param  Builder  $query
-     * @param  array  $where
-     * @return string
-     */
-    protected function whereDate(Builder $query, $where)
-    {
-        return $this->dateBasedWhere('date', $query, $where);
-    }
-
-
-    /**
-     * Compile a "where month" clause.
-     *
-     * @param  Builder  $query
-     * @param  array  $where
-     * @return string
-     */
-    protected function whereMonth(Builder $query, $where)
-    {
-        return $this->dateBasedWhere('month', $query, $where);
-    }
-
-
-    /**
-     * Compile a "where year" clause.
-     *
-     * @param  Builder  $query
-     * @param  array  $where
-     * @return string
-     */
-    protected function whereYear(Builder $query, $where)
-    {
-        return $this->dateBasedWhere('year', $query, $where);
-    }
-
-
-    /**
-     * Compile a date based where clause.
-     *
-     * @param  string  $type
-     * @param  Builder  $query
-     * @param  array  $where
-     * @return string
-     */
-    protected function dateBasedWhere($type, Builder $query, $where)
-    {
-        $value = $this->parameter($where['value']);
-
-        return $type . '(' . $this->wrap($where['column']) . ') ' . $where['operator'] . ' ' . $value;
-    }
-
-
-    /**
-     * Compile a "where in" clause.
-     *
-     * @param  Builder  $query
-     * @param  array  $where
-     * @return string
-     */
-    protected function whereIn(Builder $query, $where)
-    {
-        if (! empty($where['values'])) {
-            return $this->wrap($where['column']).' in ('.$this->parameterize($where['values']).')';
-        }
-
-        return '0 = 1';
-    }
-
-
-    /**
-     * Compile a "where not in" clause.
-     *
-     * @param  Builder  $query
-     * @param  array  $where
-     * @return string
-     */
-    protected function whereNotIn(Builder $query, $where)
-    {
-        if (!empty($where['values'])) {
-            return $this->wrap($where['column']) . ' not in (' . $this->parameterize($where['values']) . ')';
-        }
-
-        return '1 = 1';
-    }
-
-
-
-    /**
-     * Compile a "between" where clause.
-     *
-     * @param  Builder  $query
-     * @param  array  $where
-     * @return string
-     */
-    protected function whereBetween(Builder $query, $where)
-    {
-        $between = $where['not'] ? 'not between' : 'between';
-
-        $min = $this->parameter(reset($where['values']));
-
-        $max = $this->parameter(end($where['values']));
-
-        return $this->wrap($where['column']) . ' ' . $between . ' ' . $min . ' and ' . $max;
-    }
-
-
-
-    /**
-     * Compile a "between" where clause.
-     *
-     * @param  Builder  $query
-     * @param  array  $where
-     * @return string
-     */
-    protected function whereBetweenColumns(Builder $query, $where)
-    {
-        $between = $where['not'] ? 'not between' : 'between';
-
-        $min = $this->wrap(reset($where['values']));
-
-        $max = $this->wrap(end($where['values']));
-
-        return $this->wrap($where['column']).' '.$between.' '.$min.' and '.$max;
     }
 
     /**
@@ -516,7 +890,6 @@ class Grammar extends BaseGrammar
         return "insert into $table ($columns) values $parameters";
     }
 
-
     /**
      * Compile an insert ignore statement into SQL.
      *
@@ -531,7 +904,6 @@ class Grammar extends BaseGrammar
         throw new \RuntimeException('This database engine does not support inserting while ignoring errors.');
     }
 
-
     /**
      * Compile an insert and get ID statement into SQL.
      *
@@ -545,6 +917,18 @@ class Grammar extends BaseGrammar
         return $this->compileInsert($query, $values);
     }
 
+    /**
+     * Compile an insert statement using a subquery into SQL.
+     *
+     * @param  Builder  $query
+     * @param  array  $columns
+     * @param  string  $sql
+     * @return string
+     */
+    public function compileInsertUsing(Builder $query, array $columns, string $sql)
+    {
+        return "insert into {$this->wrapTable($query->from)} ({$this->columnize($columns)}) $sql";
+    }
 
     /**
      * Compile an update statement into SQL.
@@ -568,7 +952,6 @@ class Grammar extends BaseGrammar
         );
     }
 
-
     /**
      * Compile the columns for an update statement.
      *
@@ -583,6 +966,19 @@ class Grammar extends BaseGrammar
         })->implode(', ');
     }
 
+    /**
+     * Compile an update statement without joins into SQL.
+     *
+     * @param  Builder  $query
+     * @param  string  $table
+     * @param  string  $columns
+     * @param  string  $where
+     * @return string
+     */
+    protected function compileUpdateWithoutJoins(Builder $query, $table, $columns, $where)
+    {
+        return "update {$table} set {$columns} {$where}";
+    }
 
     /**
      * Compile an update statement with joins into SQL.
@@ -600,21 +996,21 @@ class Grammar extends BaseGrammar
         return "update {$table} {$joins} set {$columns} {$where}";
     }
 
-
     /**
-     * Compile an update statement without joins into SQL.
+     * Compile an "upsert" statement into SQL.
      *
-     * @param  Builder  $query
-     * @param  string  $table
-     * @param  string  $columns
-     * @param  string  $where
+     * @param  Builder $query
+     * @param  array  $values
+     * @param  array  $uniqueBy
+     * @param  array  $update
      * @return string
+     *
+     * @throws \RuntimeException
      */
-    protected function compileUpdateWithoutJoins(Builder $query, $table, $columns, $where)
+    public function compileUpsert(Builder $query, array $values, array $uniqueBy, array $update)
     {
-        return "update {$table} set {$columns} {$where}";
+        throw new \RuntimeException('This database engine does not support upserts.');
     }
-
 
     /**
      * Prepare the bindings for an update statement.
@@ -627,10 +1023,10 @@ class Grammar extends BaseGrammar
     {
         $cleanBindings = Arr::except($bindings, ['select', 'join']);
 
-        return array_values(array_merge($bindings['join'], $values, Arr::flatten($cleanBindings)));
+        return array_values(
+            array_merge($bindings['join'], $values, Arr::flatten($cleanBindings))
+        );
     }
-
-
 
     /**
      * Compile a delete statement into SQL.
@@ -641,6 +1037,7 @@ class Grammar extends BaseGrammar
     public function compileDelete(Builder $query)
     {
         $table = $this->wrapTable($query->from);
+
         $where = $this->compileWheres($query);
 
         return trim(
@@ -650,6 +1047,18 @@ class Grammar extends BaseGrammar
         );
     }
 
+    /**
+     * Compile a delete statement without joins into SQL.
+     *
+     * @param  Builder  $query
+     * @param  string  $table
+     * @param  string  $where
+     * @return string
+     */
+    protected function compileDeleteWithoutJoins(Builder $query, $table, $where)
+    {
+        return "delete from {$table} {$where}";
+    }
 
     /**
      * Compile a delete statement with joins into SQL.
@@ -668,21 +1077,6 @@ class Grammar extends BaseGrammar
         return "delete {$alias} from {$table} {$joins} {$where}";
     }
 
-
-    /**
-     * Compile a delete statement without joins into SQL.
-     *
-     * @param  Builder  $query
-     * @param  string  $table
-     * @param  string  $where
-     * @return string
-     */
-    protected function compileDeleteWithoutJoins(Builder $query, $table, $where)
-    {
-        return "delete from {$table} {$where}";
-    }
-
-
     /**
      * Prepare the bindings for a delete statement.
      *
@@ -691,9 +1085,161 @@ class Grammar extends BaseGrammar
      */
     public function prepareBindingsForDelete(array $bindings)
     {
-        return Arr::flatten(Arr::except($bindings, 'select'));
+        return Arr::flatten(
+            Arr::except($bindings, 'select')
+        );
     }
 
+    /**
+     * Compile a truncate table statement into SQL.
+     *
+     * @param  Builder  $query
+     * @return array
+     */
+    public function compileTruncate(Builder $query)
+    {
+        return ['truncate table '.$this->wrapTable($query->from) => []];
+    }
+
+    /**
+     * Compile the lock into SQL.
+     *
+     * @param  Builder  $query
+     * @param  bool|string  $value
+     * @return string
+     */
+    protected function compileLock(Builder $query, $value)
+    {
+        return is_string($value) ? $value : '';
+    }
+
+    /**
+     * Determine if the grammar supports savepoints.
+     *
+     * @return bool
+     */
+    public function supportsSavepoints()
+    {
+        return true;
+    }
+
+    /**
+     * Compile the SQL statement to define a savepoint.
+     *
+     * @param  string  $name
+     * @return string
+     */
+    public function compileSavepoint($name)
+    {
+        return 'SAVEPOINT '.$name;
+    }
+
+    /**
+     * Compile the SQL statement to execute a savepoint rollback.
+     *
+     * @param  string  $name
+     * @return string
+     */
+    public function compileSavepointRollBack($name)
+    {
+        return 'ROLLBACK TO SAVEPOINT '.$name;
+    }
+
+    /**
+     * Wrap a value in keyword identifiers.
+     *
+     * @param  Expression|string  $value
+     * @param  bool  $prefixAlias
+     * @return string
+     */
+    public function wrap($value, $prefixAlias = false)
+    {
+        if ($this->isExpression($value)) {
+            return $this->getValue($value);
+        }
+
+        // If the value being wrapped has a column alias we will need to separate out
+        // the pieces so we can wrap each of the segments of the expression on its
+        // own, and then join these both back together using the "as" connector.
+        if (stripos($value, ' as ') !== false) {
+            return $this->wrapAliasedValue($value, $prefixAlias);
+        }
+
+        // If the given value is a JSON selector we will wrap it differently than a
+        // traditional value. We will need to split this path and wrap each part
+        // wrapped, etc. Otherwise, we will simply wrap the value as a string.
+        if ($this->isJsonSelector($value)) {
+            return $this->wrapJsonSelector($value);
+        }
+
+        return $this->wrapSegments(explode('.', $value));
+    }
+
+    /**
+     * Wrap the given JSON selector.
+     *
+     * @param  string  $value
+     * @return string
+     *
+     * @throws \RuntimeException
+     */
+    protected function wrapJsonSelector($value)
+    {
+        throw new \RuntimeException('This database engine does not support JSON operations.');
+    }
+
+    /**
+     * Wrap the given JSON selector for boolean values.
+     *
+     * @param  string  $value
+     * @return string
+     */
+    protected function wrapJsonBooleanSelector($value)
+    {
+        return $this->wrapJsonSelector($value);
+    }
+
+    /**
+     * Wrap the given JSON boolean value.
+     *
+     * @param  string  $value
+     * @return string
+     */
+    protected function wrapJsonBooleanValue($value)
+    {
+        return $value;
+    }
+
+    /**
+     * Split the given JSON selector into the field and the optional path and wrap them separately.
+     *
+     * @param  string  $column
+     * @return array
+     */
+    protected function wrapJsonFieldAndPath($column)
+    {
+        $parts = explode('->', $column, 2);
+
+        $field = $this->wrap($parts[0]);
+
+        $path = count($parts) > 1 ? ', '.$this->wrapJsonPath($parts[1], '->') : '';
+
+        return [$field, $path];
+    }
+
+    /**
+     * Wrap the given JSON path.
+     *
+     * @param  string  $value
+     * @param  string  $delimiter
+     * @return string
+     */
+    protected function wrapJsonPath($value, $delimiter = '->')
+    {
+        $value = preg_replace("/([\\\\]+)?\\'/", "''", $value);
+
+        return '\'$."'.str_replace($delimiter, '"."', $value).'"\'';
+    }
 
     /**
      * Determine if the given string is a JSON selector.
@@ -704,5 +1250,39 @@ class Grammar extends BaseGrammar
     protected function isJsonSelector($value)
     {
         return Str::contains($value, '->');
+    }
+
+    /**
+     * Concatenate an array of segments, removing empties.
+     *
+     * @param  array  $segments
+     * @return string
+     */
+    protected function concatenate($segments)
+    {
+        return implode(' ', array_filter($segments, function ($value) {
+            return (string) $value !== '';
+        }));
+    }
+
+    /**
+     * Remove the leading boolean from a statement.
+     *
+     * @param  string  $value
+     * @return string
+     */
+    protected function removeLeadingBoolean($value)
+    {
+        return preg_replace('/and |or /i', '', $value, 1);
+    }
+
+    /**
+     * Get the grammar specific operators.
+     *
+     * @return array
+     */
+    public function getOperators()
+    {
+        return $this->operators;
     }
 }

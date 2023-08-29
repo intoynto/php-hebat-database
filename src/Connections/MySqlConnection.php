@@ -6,7 +6,9 @@ namespace Intoy\HebatDatabase\Connections;
 use PDO;
 use Intoy\HebatDatabase\Connection;
 use Intoy\HebatDatabase\Query\Grammars\MySQLGrammar as Grammar;
+use Intoy\HebatDatabase\Schema\Grammars\MySqlGrammar as SchemaGrammar;
 use Intoy\HebatDatabase\Query\Processors\MySqlProcessor;
+use Intoy\HebatDatabase\Schema\MySqlBuilder;
 
 class MySqlConnection extends Connection
 {
@@ -26,6 +28,31 @@ class MySqlConnection extends Connection
     protected function getDefaultGrammar()
     {
         return $this->withTablePrefix(new Grammar());
+    }
+
+
+    /**
+     * Get a schema builder instance for the connection.
+     *
+     * @return \Intoy\HebatDatabase\Schema\MySqlBuilder
+     */
+    public function getSchemaBuilder()
+    {
+        if (is_null($this->schemaGrammar)) {
+            $this->useDefaultSchemaGrammar();
+        }
+
+        return new MySqlBuilder($this);
+    }
+
+    /**
+     * Get the default schema grammar instance.
+     *
+     * @return \Intoy\HebatDatabase\Schema\Grammars\Grammar
+     */
+    protected function getDefaultSchemaGrammar()
+    {
+        return $this->withTablePrefix(new SchemaGrammar);
     }
 
 

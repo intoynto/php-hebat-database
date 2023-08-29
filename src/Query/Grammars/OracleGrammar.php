@@ -4,6 +4,8 @@ namespace Intoy\HebatDatabase\Query\Grammars;
 
 use Intoy\HebatDatabase\Query\Builder;
 use Intoy\HebatDatabase\Query\Grammars\Grammar;
+use Intoy\HebatDatabase\Schema\Blueprint;
+use Intoy\HebatSupport\Fluent;
 use Intoy\HebatDatabase\Oci8\OracleReservedWords;
 use Intoy\HebatSupport\Str;
 
@@ -26,7 +28,7 @@ class OracleGrammar extends Grammar
     /**
      * Compile an exists statement into SQL.
      *
-     * @param  Builder  $query
+     * @param \Intoy\HebatDatabase\Query\Builder $query
      * @return string
      */
     public function compileExists(Builder $query)
@@ -34,7 +36,7 @@ class OracleGrammar extends Grammar
         $q          = clone $query;
         $q->columns = [];
         $q->selectRaw('1 as "exists"')
-          ->whereRaw('rownum = 1');
+          ->whereRaw("rownum = 1");
 
         return $this->compileSelect($q);
     }
@@ -42,30 +44,16 @@ class OracleGrammar extends Grammar
     /**
      * Compile a select query into SQL.
      *
-     * @param  Builder
+     * @param  \Intoy\HebatDatabase\Query\Builder
      * @return string
      */
     public function compileSelect(Builder $query)
     {
-        if ($query->unions && $query->aggregate) {
-            return $this->compileUnionAggregate($query);
-        }
-
-        // If the query does not have any columns set, we'll set the columns to the
-        // * character to just get all of the columns from the database. Then we
-        // can build the query and concatenate all the pieces together as one.
-        $original = $query->columns;
-
         if (is_null($query->columns)) {
             $query->columns = ['*'];
         }
 
         $components = $this->compileComponents($query);
-
-        // To compile the query, we'll spin through each component of the query and
-        // see if that component exists. If it does we'll just call the compiler
-        // function for the component which is responsible for making the SQL.
-        $sql = trim($this->concatenate($components));
 
         // If an offset is present on the query, we will need to wrap the query in
         // a big "ANSI" offset syntax block. This is very nasty compared to the
@@ -74,18 +62,12 @@ class OracleGrammar extends Grammar
             return $this->compileAnsiOffset($query, $components);
         }
 
-        if ($query->unions) {
-            $sql = $this->wrapUnion($sql).' '.$this->compileUnions($query);
-        }
-
-        $query->columns = $original;
-
-        return $sql;
+        return trim($this->concatenate($components));
     }
 
     /**
-     * @param  Builder  $query
-     * @param  array  $components
+     * @param Builder $query
+     * @param array $components
      * @return bool
      */
     protected function isPaginationable(Builder $query, array $components)
@@ -96,22 +78,12 @@ class OracleGrammar extends Grammar
     /**
      * Create a full ANSI offset clause for the query.
      *
-     * @param  Builder  $query
-     * @param  array  $components
+     * @param  \Intoy\HebatDatabase\Query\Builder $query
+     * @param  array $components
      * @return string
      */
     protected function compileAnsiOffset(Builder $query, $components)
     {
-        // Improved response time with FIRST_ROWS(n) hint for ORDER BY queries
-        if ($query->getConnection()->getConfig('server_version') == '12c') {
-            $components['columns'] = str_replace('select', "select /*+ FIRST_ROWS({$query->limit}) */", $components['columns']);
-            $offset                = $query->offset ?: 0;
-            $limit                 = $query->limit;
-            $components['limit']   = "offset $offset rows fetch next $limit rows only";
-
-            return $this->concatenate($components);
-        }
-
         $constraint = $this->compileRowConstraint($query);
 
         $sql = $this->concatenate($components);
@@ -119,59 +91,55 @@ class OracleGrammar extends Grammar
         // We are now ready to build the final SQL query so we'll create a common table
         // expression from the query and get the records with row numbers within our
         // given limit and offset value that we just put on as a query constraint.
-        return $this->compileTableExpression($sql, $constraint, $query);
+        $temp = $this->compileTableExpression($sql, $constraint, $query);
+
+        return $temp;
     }
 
     /**
      * Compile the limit / offset row constraint for a query.
      *
-     * @param  Builder  $query
+     * @param  \Intoy\HebatDatabase\Query\Builder $query
      * @return string
      */
     protected function compileRowConstraint($query)
     {
-        $start  = $query->offset + 1;
-        $finish = $query->offset + $query->limit;
+        $start = $query->offset + 1;
 
-        if ($query->limit == 1 && is_null($query->offset)) {
-            return '= 1';
+        if ($query->limit == 1) {
+            return "= 1";
         }
 
-        if ($query->offset && is_null($query->limit)) {
-            return ">= {$start}";
+        if ($query->limit > 1) {
+            $finish = $query->offset + $query->limit;
+
+            return "between {$start} and {$finish}";
         }
 
-        return "between {$start} and {$finish}";
+        return ">= {$start}";
     }
 
     /**
      * Compile a common table expression for a query.
      *
-     * @param  string  $sql
-     * @param  string  $constraint
-     * @param  Builder  $query
+     * @param  string $sql
+     * @param  string $constraint
+     * @param Builder $query
      * @return string
      */
     protected function compileTableExpression($sql, $constraint, $query)
     {
-        if ($query->limit == 1 && is_null($query->offset)) {
+        if ($query->limit > 1) {
+            return "select t2.* from ( select rownum AS \"rn\", t1.* from ({$sql}) t1 ) t2 where t2.\"rn\" {$constraint}";
+        } else {
             return "select * from ({$sql}) where rownum {$constraint}";
         }
-
-        if (! is_null($query->limit && ! is_null($query->offset))) {
-            $start  = $query->offset + 1;
-            $finish = $query->offset + $query->limit;
-
-            return "select t2.* from ( select rownum AS \"rn\", t1.* from ({$sql}) t1 where rownum <= {$finish}) t2 where t2.\"rn\" >= {$start}";
-        }
-
-        return "select t2.* from ( select rownum AS \"rn\", t1.* from ({$sql}) t1 ) t2 where t2.\"rn\" {$constraint}";
     }
 
     /**
      * Compile a truncate table statement into SQL.
      *
-     * @param  Builder  $query
+     * @param  \Intoy\HebatDatabase\Query\Builder $query
      * @return array
      */
     public function compileTruncate(Builder $query)
@@ -180,27 +148,9 @@ class OracleGrammar extends Grammar
     }
 
     /**
-     * Wrap a value in keyword identifiers.
-     *
-     * Override due to laravel's stringify integers.
-     *
-     * @param  \Intoy\HebatDatabase\Query\Expression|string  $value
-     * @param  bool  $prefixAlias
-     * @return string
-     */
-    public function wrap($value, $prefixAlias = false)
-    {
-        if (is_int($value) || is_float($value)) {
-            return $value;
-        }
-
-        return parent::wrap($value, $prefixAlias);
-    }
-
-    /**
      * Wrap a table in keyword identifiers.
      *
-     * @param  \Intoy\HebatDatabase\Query\Expression|string  $table
+     * @param  \Intoy\HebatDatabase\Query\Expression|string $table
      * @return string
      */
     public function wrapTable($table)
@@ -210,7 +160,7 @@ class OracleGrammar extends Grammar
         }
 
         if (strpos(strtolower($table), ' as ') !== false) {
-            $table = str_replace(' as ', ' ', strtolower($table));
+            $table = str_replace(' as ', ' ', $table);
         }
 
         $tableName = $this->wrap($this->tablePrefix . $table, true);
@@ -235,7 +185,7 @@ class OracleGrammar extends Grammar
     /**
      * Set the schema prefix.
      *
-     * @param  string  $prefix
+     * @param string $prefix
      */
     public function setSchemaPrefix($prefix)
     {
@@ -245,7 +195,7 @@ class OracleGrammar extends Grammar
     /**
      * Wrap a single string in keyword identifiers.
      *
-     * @param  string  $value
+     * @param  string $value
      * @return string
      */
     protected function wrapValue($value)
@@ -254,7 +204,7 @@ class OracleGrammar extends Grammar
             return $value;
         }
 
-        $value = Str::upper($value);
+        $value = $this->isReserved($value) ? Str::lower($value) : Str::upper($value);
 
         return '"' . str_replace('"', '""', $value) . '"';
     }
@@ -262,9 +212,9 @@ class OracleGrammar extends Grammar
     /**
      * Compile an insert and get ID statement into SQL.
      *
-     * @param  \Intoy\HebatDatabase\Query\Builder  $query
-     * @param  array  $values
-     * @param  string  $sequence
+     * @param  \Intoy\HebatDatabase\Query\Builder $query
+     * @param  array $values
+     * @param  string $sequence
      * @return string
      */
     public function compileInsertGetId(Builder $query, $values, $sequence = 'id')
@@ -275,14 +225,13 @@ class OracleGrammar extends Grammar
 
         $backtrace = debug_backtrace(DEBUG_BACKTRACE_PROVIDE_OBJECT, 4)[2]['object'];
 
-        /*
-        if ($backtrace instanceof EloquentBuilder) {
+        $classEloquent='\\Illuminate\\Database\\Eloquent\\Builder';
+        if (class_exists($classEloquent) && $backtrace instanceof $classEloquent) {
             $model = $backtrace->getModel();
             if ($model->sequence && ! isset($values[$model->getKeyName()]) && $model->incrementing) {
                 $values[$sequence] = null;
             }
         }
-        */
 
         return $this->compileInsert($query, $values) . ' returning ' . $this->wrap($sequence) . ' into ?';
     }
@@ -290,8 +239,8 @@ class OracleGrammar extends Grammar
     /**
      * Compile an insert statement into SQL.
      *
-     * @param  \Intoy\HebatDatabase\Query\Builder  $query
-     * @param  array  $values
+     * @param  \Intoy\HebatDatabase\Query\Builder $query
+     * @param  array $values
      * @return string
      */
     public function compileInsert(Builder $query, array $values)
@@ -318,7 +267,7 @@ class OracleGrammar extends Grammar
             $insertQueries = [];
             foreach ($value as $parameter) {
                 $parameter       = (str_replace(['(', ')'], '', $parameter));
-                $insertQueries[] = 'select ' . $parameter . ' from dual ';
+                $insertQueries[] = "select " . $parameter . " from dual ";
             }
             $parameters = implode('union all ', $insertQueries);
 
@@ -332,10 +281,10 @@ class OracleGrammar extends Grammar
     /**
      * Compile an insert with blob field statement into SQL.
      *
-     * @param  \Intoy\HebatDatabase\Query\Builder  $query
-     * @param  array  $values
-     * @param  array  $binaries
-     * @param  string  $sequence
+     * @param  \Intoy\HebatDatabase\Query\Builder $query
+     * @param  array $values
+     * @param  array $binaries
+     * @param  string $sequence
      * @return string
      */
     public function compileInsertLob(Builder $query, $values, $binaries, $sequence = 'id')
@@ -373,10 +322,10 @@ class OracleGrammar extends Grammar
     /**
      * Compile an update statement into SQL.
      *
-     * @param  \Intoy\HebatDatabase\Query\Builder  $query
-     * @param  array  $values
-     * @param  array  $binaries
-     * @param  string  $sequence
+     * @param  \Intoy\HebatDatabase\Query\Builder $query
+     * @param  array $values
+     * @param  array $binaries
+     * @param  string $sequence
      * @return string
      */
     public function compileUpdateLob(Builder $query, array $values, array $binaries, $sequence = 'id')
@@ -415,9 +364,10 @@ class OracleGrammar extends Grammar
         // If the query has any "join" clauses, we will setup the joins on the builder
         // and compile them so we can attach them to this update, as update queries
         // can get join statements to attach to other tables when they're needed.
-        $joins = '';
         if (isset($query->joins)) {
             $joins = ' ' . $this->compileJoins($query, $query->joins);
+        } else {
+            $joins = '';
         }
 
         // Of course, update queries may also be constrained by where clauses so we'll
@@ -431,8 +381,8 @@ class OracleGrammar extends Grammar
     /**
      * Compile the lock into SQL.
      *
-     * @param  \Intoy\HebatDatabase\Query\Builder  $query
-     * @param  bool|string  $value
+     * @param  \Intoy\HebatDatabase\Query\Builder $query
+     * @param  bool|string $value
      * @return string
      */
     protected function compileLock(Builder $query, $value)
@@ -451,8 +401,8 @@ class OracleGrammar extends Grammar
     /**
      * Compile the "limit" portions of the query.
      *
-     * @param  \Intoy\HebatDatabase\Query\Builder  $query
-     * @param  int  $limit
+     * @param  \Intoy\HebatDatabase\Query\Builder $query
+     * @param  int $limit
      * @return string
      */
     protected function compileLimit(Builder $query, $limit)
@@ -463,8 +413,8 @@ class OracleGrammar extends Grammar
     /**
      * Compile the "offset" portions of the query.
      *
-     * @param  \Intoy\HebatDatabase\Query\Builder  $query
-     * @param  int  $offset
+     * @param  \Intoy\HebatDatabase\Query\Builder $query
+     * @param  int $offset
      * @return string
      */
     protected function compileOffset(Builder $query, $offset)
@@ -475,8 +425,8 @@ class OracleGrammar extends Grammar
     /**
      * Compile a "where date" clause.
      *
-     * @param  \Intoy\HebatDatabase\Query\Builder  $query
-     * @param  array  $where
+     * @param  \Intoy\HebatDatabase\Query\Builder $query
+     * @param  array $where
      * @return string
      */
     protected function whereDate(Builder $query, $where)
@@ -489,9 +439,9 @@ class OracleGrammar extends Grammar
     /**
      * Compile a date based where clause.
      *
-     * @param  string  $type
-     * @param  \Intoy\HebatDatabase\Query\Builder  $query
-     * @param  array  $where
+     * @param  string $type
+     * @param  \Intoy\HebatDatabase\Query\Builder $query
+     * @param  array $where
      * @return string
      */
     protected function dateBasedWhere($type, Builder $query, $where)
@@ -499,82 +449,5 @@ class OracleGrammar extends Grammar
         $value = $this->parameter($where['value']);
 
         return "extract ($type from {$this->wrap($where['column'])}) {$where['operator']} $value";
-    }
-
-    /**
-     * Compile a "where not in raw" clause.
-     *
-     * For safety, whereIntegerInRaw ensures this method is only used with integer values.
-     *
-     * @param  \Intoy\HebatDatabase\Query\Builder  $query
-     * @param  array  $where
-     * @return string
-     */
-    protected function whereNotInRaw(Builder $query, $where)
-    {
-        if (! empty($where['values'])) {
-            if (is_array($where['values']) && count($where['values']) > 1000) {
-                return $this->resolveClause($where['column'], $where['values'], 'not in');
-            } else {
-                return $this->wrap($where['column']).' not in ('.implode(', ', $where['values']).')';
-            }
-        }
-
-        return '1 = 1';
-    }
-
-    /**
-     * Compile a "where in raw" clause.
-     *
-     * For safety, whereIntegerInRaw ensures this method is only used with integer values.
-     *
-     * @param  \Intoy\HebatDatabase\Query\Builder  $query
-     * @param  array  $where
-     * @return string
-     */
-    protected function whereInRaw(Builder $query, $where)
-    {
-        if (! empty($where['values'])) {
-            if (is_array($where['values']) && count($where['values']) > 1000) {
-                return $this->resolveClause($where['column'], $where['values'], 'in');
-            } else {
-                return $this->wrap($where['column']).' in ('.implode(', ', $where['values']).')';
-            }
-        }
-
-        return '0 = 1';
-    }
-
-    private function resolveClause($column, $values, $type)
-    {
-        $chunks      = array_chunk($values, 1000);
-        $whereClause = '';
-        $i           = 0;
-        $type        = $this->wrap($column) . ' '.$type.' ';
-        foreach ($chunks as $ch) {
-            // Add or only at the second loop
-            if ($i === 1) {
-                $type = ' or ' . $type . ' ';
-            }
-            $whereClause .= $type . '('.implode(', ', $ch).')';
-            $i++;
-        }
-
-        return '(' . $whereClause . ')';
-    }
-
-    /**
-     * Compile a union aggregate query into SQL.
-     *
-     * @param  \Intoy\HebatDatabase\Query\Builder  $query
-     * @return string
-     */
-    protected function compileUnionAggregate(Builder $query)
-    {
-        $sql = $this->compileAggregate($query, $query->aggregate);
-
-        $query->aggregate = null;
-
-        return $sql.' from ('.$this->compileSelect($query).') '.$this->wrapTable('temp_table');
     }
 }

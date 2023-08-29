@@ -11,7 +11,7 @@ use Intoy\HebatDatabase\Connection;
 use Intoy\HebatDatabase\query\Grammar;
 use Intoy\HebatSupport\Str;
 
-use Yajra\Oci8\PDO\Oci8Driver;
+//use Yajra\Oci8\PDO\Oci8Driver;
 use Intoy\HebatDatabase\Query\Grammars\OracleGrammar as QueryGrammar;
 use Intoy\HebatDatabase\Query\OracleBuilder as QueryBuilder;
 use Intoy\HebatDatabase\Query\Processors\OracleProcessor as Processor;
@@ -53,21 +53,7 @@ class Oci8Connection extends Connection
         $this->trigger  = new Trigger($this);        
     }
 
-    /**
-     * @return Grammar
-     */
-    protected function getDefaultGrammar()
-    {
-        return $this->withTablePrefix(new SchemaGrammar());
-    }
-
-    /**
-     * @return Processor
-     */
-    protected function getDefaultProcessor()
-    {
-        return new Processor();
-    }
+    
 
     /**
      * Get current schema.
@@ -174,6 +160,22 @@ class Oci8Connection extends Connection
         }
 
         return new SchemaBuilder($this);
+    }
+
+    /**
+     * @return Grammar
+     */
+    protected function getDefaultGrammar()
+    {
+        return $this->withTablePrefix(new SchemaGrammar());
+    }
+
+    /**
+     * @return Processor
+     */
+    protected function getDefaultProcessor()
+    {
+        return new Processor();
     }
 
     /**
