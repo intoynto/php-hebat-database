@@ -37,7 +37,7 @@ class QueryHelper
      * @param string|array $fields
      * @return void
      */
-    public static function addSearchString($builder,$requestParams,$requestField,$fields)
+    public static function addSearchString(&$builder,$requestParams,$requestField,$fields)
     {
         if(empty($requestField) || empty($fields)) return;
 
@@ -72,7 +72,7 @@ class QueryHelper
      * @param string|array $fields
      * @return void
      */
-    public static function addWhereString($builder,$requestParams,$requestField,$fields)
+    public static function addWhereString(&$builder,$requestParams,$requestField,$fields)
     {
         if(empty($requestField) || empty($fields)) return;
 
@@ -142,7 +142,7 @@ class QueryHelper
      * @param string|array $fields
      * @return void
      */
-    public static function addSearchInt($builder,$requestParams,$requestField,$fields)
+    public static function addSearchInt(&$builder,$requestParams,$requestField,$fields)
     {
         if(empty($requestField) || empty($fields)) return;
 
@@ -176,7 +176,7 @@ class QueryHelper
      * @param array $options ['limit'=>20,'order'=>[],'direction'=>'asc|desc']
      * @return stdClass
      */
-    public static function createPagination($builder,$requestParams,$options=[])
+    public static function createPagination(&$builder,$requestParams,$options=[])
     {
         $order=Arr::get($options,'order');
         if(!empty($order))

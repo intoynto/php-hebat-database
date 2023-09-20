@@ -12,6 +12,7 @@ use LogicException;
 use Intoy\HebatDatabase\Query\Builder;
 use Intoy\HebatDatabase\Query\Grammars\{Grammar as QueryGrammar};
 use Intoy\HebatDatabase\Query\Processors\Processor;
+use Intoy\HebatDatabase\Query\Expression;
 use Intoy\HebatDatabase\QueryException;
 use Intoy\HebatSupport\Arr;
 use Intoy\HebatDatabase\Concerns\ManagesTransactions;
@@ -419,6 +420,18 @@ class Connection
         {
             throw $e;
         }
+    }
+
+
+    /**
+     * Get a new raw query expression.
+     *
+     * @param  mixed  $value
+     * @return Expression
+     */
+    public function raw($value)
+    {
+        return new Expression($value);
     }
 
     /**

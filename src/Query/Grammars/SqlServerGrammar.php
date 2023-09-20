@@ -5,6 +5,7 @@ namespace Intoy\HebatDatabase\Query\Grammars;
 use Intoy\HebatSupport\Arr;
 use Intoy\HebatSupport\Str;
 use Intoy\HebatDatabase\Query\Builder;
+use Intoy\HebatDatabase\Query\Expression;
 
 class SqlServerGrammar extends Grammar
 {
@@ -91,6 +92,22 @@ class SqlServerGrammar extends Grammar
     }
 
     /**
+     * {@inheritdoc}
+     *
+     * @param  Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function whereBitwise(Builder $query, $where)
+    {
+        $value = $this->parameter($where['value']);
+
+        $operator = str_replace('?', '??', $where['operator']);
+
+        return '('.$this->wrap($where['column']).' '.$operator.' '.$value.') != 0';
+    }
+
+    /**
      * Compile a "where date" clause.
      *
      * @param  Builder  $query
@@ -116,6 +133,80 @@ class SqlServerGrammar extends Grammar
         $value = $this->parameter($where['value']);
 
         return 'cast('.$this->wrap($where['column']).' as time) '.$where['operator'].' '.$value;
+    }
+
+
+    /**
+     * Compile a "JSON contains" statement into SQL.
+     *
+     * @param  string  $column
+     * @param  string  $value
+     * @return string
+     */
+    protected function compileJsonContains($column, $value)
+    {
+        [$field, $path] = $this->wrapJsonFieldAndPath($column);
+
+        return $value.' in (select [value] from openjson('.$field.$path.'))';
+    }
+
+
+    /**
+     * Prepare the binding for a "JSON contains" statement.
+     *
+     * @param  mixed  $binding
+     * @return string
+     */
+    public function prepareBindingForJsonContains($binding)
+    {
+        return is_bool($binding) ? json_encode($binding) : $binding;
+    }
+
+
+    /**
+     * Compile a "JSON length" statement into SQL.
+     *
+     * @param  string  $column
+     * @param  string  $operator
+     * @param  string  $value
+     * @return string
+     */
+    protected function compileJsonLength($column, $operator, $value)
+    {
+        [$field, $path] = $this->wrapJsonFieldAndPath($column);
+
+        return '(select count(*) from openjson('.$field.$path.')) '.$operator.' '.$value;
+    }
+
+
+    /**
+     * {@inheritdoc}
+     *
+     * @param  array  $having
+     * @return string
+     */
+    protected function compileHaving(array $having)
+    {
+        if ($having['type'] === 'Bitwise') {
+            return $this->compileHavingBitwise($having);
+        }
+
+        return parent::compileHaving($having);
+    }
+
+    /**
+     * Compile a having clause involving a bitwise operator.
+     *
+     * @param  array  $having
+     * @return string
+     */
+    protected function compileHavingBitwise($having)
+    {
+        $column = $this->wrap($having['column']);
+
+        $parameter = $this->parameter($having['value']);
+
+        return $having['boolean'].' ('.$column.' '.$having['operator'].' '.$parameter.') != 0';
     }
 
     /**
@@ -450,7 +541,7 @@ class SqlServerGrammar extends Grammar
     /**
      * Wrap a table in keyword identifiers.
      *
-     * @param  Expression|string  $table
+     * @param Expression|string  $table
      * @return string
      */
     public function wrapTable($table)

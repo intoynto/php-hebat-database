@@ -567,8 +567,7 @@ abstract class Model
                     $expresion=new Expression("upper({$field})");    
                     $builder->where($expresion,"=",$value_field);
                 }
-            }
-            
+            }            
         });
 
         collect($obj->fields_search_int)->map(function($val,$key) use ($params,$builder)
