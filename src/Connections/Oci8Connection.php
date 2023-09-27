@@ -8,7 +8,7 @@ use Exception;
 use Throwable;
 
 use Intoy\HebatDatabase\Connection;
-use Intoy\HebatDatabase\query\Grammar;
+use Intoy\HebatDatabase\Grammar;
 use Intoy\HebatSupport\Str;
 
 //use Yajra\Oci8\PDO\Oci8Driver;
@@ -355,8 +355,8 @@ class Oci8Connection extends Connection
     /**
      * Set the table prefix and return the grammar.
      *
-     * @param  \Intoy\HebatDatabase\Query\Grammar|\Intoy\HebatDatabase\Oci8\Query\Grammars\OracleGrammar|Grammars\OracleGrammar  $grammar
-     * @return \Intoy\HebatDatabase\Query\Grammar
+     * @param  \Intoy\HebatDatabase\Query\Grammars\Grammar|\Intoy\HebatDatabase\Oci8\Query\Grammars\OracleGrammar|Grammars\OracleGrammar  $grammar
+     * @return \Intoy\HebatDatabase\Query\Grammars\Grammar
      */
     public function withTablePrefix(Grammar $grammar)
     {

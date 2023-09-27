@@ -4,7 +4,7 @@ namespace Intoy\HebatDatabase\Schema\Grammars;
 
 use Intoy\HebatDatabase\Connection;
 use Intoy\HebatDatabase\Schema\Blueprint;
-use Intoy\HebatDatabase\Schema\Grammars\Grammar;
+use Intoy\HebatDatabase\Query\Grammars\Grammar;
 use Intoy\HebatSupport\Fluent;
 use Intoy\HebatDatabase\Oci8\OracleReservedWords;
 
