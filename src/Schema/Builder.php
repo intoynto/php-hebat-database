@@ -48,6 +48,14 @@ class Builder
 
 
     /**
+     * Indicates whether Doctrine DBAL usage will be prevented if possible when dropping, renaming, and modifying columns.
+     *
+     * @var bool
+     */
+    public static $alwaysUsesNativeSchemaOperationsIfPossible = false;
+
+
+    /**
      * Create a new database Schema manager.
      *
      * @param  \Intoy\HebatDatabase\Connection  $connection
@@ -432,7 +440,7 @@ class Builder
     public function registerCustomDoctrineType($class, $name, $type)
     {
         if (! $this->connection->isDoctrineAvailable()) {
-            throw new RuntimeException(
+            throw new \RuntimeException(
                 'Registering a custom Doctrine type requires Doctrine DBAL (doctrine/dbal).'
             );
         }

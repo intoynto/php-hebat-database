@@ -4,7 +4,7 @@ namespace Intoy\HebatDatabase\Pdo\Oci8;
 
 use PDO;
 use Exception;
-use OCI_Lob;
+use OCILob;
 use PDOStatement;
 use ReflectionClass;
 use Intoy\HebatDatabase\Pdo\Oci8;
@@ -65,7 +65,7 @@ class Statement extends PDOStatement
      *
      * @var string
      */
-    private $fetchClassName = '\stdClass';
+    private $fetchClassName = '\ArrayIterator';
 
     /**
      * Constructor arguments for PDO::FETCH_CLASS.
@@ -567,6 +567,42 @@ class Statement extends PDOStatement
         return false;
     }
 
+    
+
+    /**
+     * Retrieve stringify boolean in attribute .
+     *
+     * @return bool The attribute value.
+     */
+    public function getStringify(): bool
+    {
+        if (is_array($this->getAttribute(PDO::ATTR_STRINGIFY_FETCHES)) && empty($this->getAttribute(PDO::ATTR_STRINGIFY_FETCHES))) {
+            return true;
+        } elseif ($this->getAttribute(PDO::ATTR_STRINGIFY_FETCHES)) {
+            return true;
+        } elseif (! $this->getAttribute(PDO::ATTR_STRINGIFY_FETCHES)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * number value return as string from oracle.
+     *
+     * @param  $value
+     * @return float|int|string
+     */
+    private function castToNumeric($value)
+    {
+        if (is_numeric($value)) {
+            return $val = $value + 0;
+        }
+
+        return $value;
+    }
+
+
     /**
      * Retrieve a statement attribute.
      *
@@ -637,34 +673,6 @@ class Statement extends PDOStatement
      * ORDER BY clauses in SQL to restrict results before retrieving and
      * processing them with PHP.
      */
-    /*
-    
-    public function fetchAll($mode = null, ...$args)
-    {
-        if (is_null($mode)) {
-            $mode = $this->fetchMode;
-        }
-
-        $this->setFetchMode($mode, $args);
-
-        $this->results = [];
-        while ($row = $this->fetch()) {
-            if ((is_array($row) || is_object($row)) && is_resource(reset($row))) {
-                $stmt = new self(reset($row), $this->connection, $this->options);
-                $stmt->execute();
-                $stmt->setFetchMode($mode, $args);
-                while ($rs = $stmt->fetch()) {
-                    $this->results[] = $rs;
-                }
-            } else {
-                $this->results[] = $row;
-            }
-        }
-
-        return $this->results;
-    }    
-    */
-
     public function fetchAll($mode = NULL, $class_name = NULL, $args = NULL): array
     {
         if (is_null($mode)) {
@@ -688,9 +696,7 @@ class Statement extends PDOStatement
         }
 
         return $this->results;
-    }
-
-   
+    }   
 
     /**
      * Executes a prepared statement.
@@ -771,7 +777,8 @@ class Statement extends PDOStatement
      *
      * @param  string  $className
      * @param  array  $ctorArgs
-     * @return mixed
+     * @return false|object
+     * @throws \ReflectionException
      */
     public function fetchObject($className = null, $ctorArgs = [])
     {

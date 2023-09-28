@@ -4,6 +4,8 @@ namespace Intoy\HebatDatabase\Query\Processors;
 
 use DateTime;
 use PDO;
+use Intoy\HebatDatabase\Connections\Oci8Connection;
+use Intoy\HebatDatabase\Pdo\Oci8;
 use Intoy\HebatDatabase\Query\Builder;
 
 class OracleProcessor extends Processor
@@ -19,13 +21,20 @@ class OracleProcessor extends Processor
      */
     public function processInsertGetId(Builder $query, $sql, $values, $sequence = null)
     {
-        $id        = 0;
+        $connection = $query->getConnection();
+
+        $connection->recordsHaveBeenModified();
+        $start = microtime(true);
+
+        $id = 0;
         $parameter = 1;
         $statement = $this->prepareStatement($query, $sql);
-        $values    = $this->incrementBySequence($values, $sequence);
+        $values = $this->incrementBySequence($values, $sequence);
         $parameter = $this->bindValues($values, $statement, $parameter);
-        $statement->bindParam($parameter, $id, PDO::PARAM_INT, 10);
+        $statement->bindParam($parameter, $id, PDO::PARAM_INT, -1);
         $statement->execute();
+
+        $connection->logQuery($sql, $values, $start);
 
         return (int) $id;
     }
@@ -35,11 +44,11 @@ class OracleProcessor extends Processor
      *
      * @param  Builder  $query
      * @param  string  $sql
-     * @return \PDOStatement
+     * @return \PDOStatement|Oci8
      */
     private function prepareStatement(Builder $query, $sql)
     {
-        
+        /** @var Oci8Connection */
         $connection = $query->getConnection();
         $pdo        = $connection->getPdo();
 
@@ -55,8 +64,8 @@ class OracleProcessor extends Processor
      */
     protected function incrementBySequence(array $values, $sequence)
     {
-        $builder     = debug_backtrace(DEBUG_BACKTRACE_PROVIDE_OBJECT, 5)[3]['object'];
-        $builderArgs = debug_backtrace(DEBUG_BACKTRACE_PROVIDE_OBJECT, 5)[2]['args'];
+        //$builder     = debug_backtrace(DEBUG_BACKTRACE_PROVIDE_OBJECT, 5)[3]['object'];
+        //$builderArgs = debug_backtrace(DEBUG_BACKTRACE_PROVIDE_OBJECT, 5)[2]['args'];
         /*
         if (! isset($builderArgs[1][0][$sequence])) {
             if ($builder instanceof EloquentBuilder) {

@@ -222,8 +222,9 @@ class OracleGrammar extends Grammar
         if (empty($sequence)) {
             $sequence = 'id';
         }
-
-        $backtrace = debug_backtrace(DEBUG_BACKTRACE_PROVIDE_OBJECT, 4)[2]['object'];
+        
+        $debug_trace = debug_backtrace(DEBUG_BACKTRACE_PROVIDE_OBJECT, 4)[2];
+        $backtrace=data_get($debug_trace,'object');
 
         $classEloquent='\\Illuminate\\Database\\Eloquent\\Builder';
         if (class_exists($classEloquent) && $backtrace instanceof $classEloquent) {

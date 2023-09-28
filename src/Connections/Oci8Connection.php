@@ -51,9 +51,7 @@ class Oci8Connection extends Connection
         parent::__construct($pdo, $database, $tablePrefix, $config);
         $this->sequence = new Sequence($this);
         $this->trigger  = new Trigger($this);        
-    }
-
-    
+    }    
 
     /**
      * Get current schema.
@@ -163,17 +161,31 @@ class Oci8Connection extends Connection
     }
 
     /**
-     * @return Grammar
+     * Get the default query grammar instance.
+     *
+     * @return \Intoy\HebatDatabase\Grammar|\Intoy\HebatDatabase\Oci8\Query\Grammars\OracleGrammar
      */
-    protected function getDefaultGrammar()
+    protected function getDefaultQueryGrammar()
+    {
+        return $this->withTablePrefix(new QueryGrammar());
+    }
+
+    /**
+     * Get the default schema grammar instance.
+     *
+     * @return \Intoy\HebatDatabase\Query\Grammar|Grammars\OracleGrammar
+     */
+    protected function getDefaultSchemaGrammar()
     {
         return $this->withTablePrefix(new SchemaGrammar());
     }
 
     /**
-     * @return Processor
+     * Get the default post processor instance.
+     *
+     * @return \Intoy\HebatDatabase\Query\Processors\OracleProcessor
      */
-    protected function getDefaultProcessor()
+    protected function getDefaultPostProcessor()
     {
         return new Processor();
     }
@@ -342,15 +354,7 @@ class Oci8Connection extends Connection
         return $this->getPdo()->prepare($sql);
     }
 
-    /**
-     * Get the default query grammar instance.
-     *
-     * @return \Intoy\HebatDatabase\Grammar|\Intoy\HebatDatabase\Oci8\Query\Grammars\OracleGrammar
-     */
-    protected function getDefaultQueryGrammar()
-    {
-        return $this->withTablePrefix(new QueryGrammar());
-    }
+    
 
     /**
      * Set the table prefix and return the grammar.
@@ -385,26 +389,7 @@ class Oci8Connection extends Connection
     {
         return isset($this->config['prefix_schema']) ? $this->config['prefix_schema'] : '';
     }    
-
-    /**
-     * Get the default schema grammar instance.
-     *
-     * @return \Intoy\HebatDatabase\Query\Grammar|Grammars\OracleGrammar
-     */
-    protected function getDefaultSchemaGrammar()
-    {
-        return $this->withTablePrefix(new SchemaGrammar());
-    }
-
-    /**
-     * Get the default post processor instance.
-     *
-     * @return \Intoy\HebatDatabase\Query\Processors\OracleProcessor
-     */
-    protected function getDefaultPostProcessor()
-    {
-        return new Processor();
-    }
+    
 
     /**
      * Add bindings to statement.
