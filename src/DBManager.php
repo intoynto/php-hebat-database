@@ -51,6 +51,26 @@ class DBManager implements ConnectionResolverInterface
         $this->reconnector=function ($connection){ $this->reconnect($connection->getName()); };
     }
 
+    /**
+     * Get Config Array configuration connection
+     * @return array
+     */
+    public function getConfig()
+    {
+        return $this->config;
+    }
+
+
+    /**
+     * Get Array Active connection instance name
+     * @return array
+     */
+    public function getConnectionNames()
+    {
+        return array_keys($this->connections);
+    }
+
+
     public function getDefaultConnection()
     {
         return Arr::get($this->config,"default");
