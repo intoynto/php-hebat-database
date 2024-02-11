@@ -5,7 +5,7 @@ namespace Intoy\HebatDatabase\Connections;
 
 use PDO;
 use Intoy\HebatDatabase\Connection;
-use Intoy\HebatDatabase\Query\Grammars\PostgresGrammar as Grammar;
+use Intoy\HebatDatabase\Query\Grammars\PostgresGrammar as QueryGrammar;
 use Intoy\HebatDatabase\Schema\Grammars\PostgresGrammar as SchemaGrammar;
 use Intoy\HebatDatabase\Query\Processors\PostgresProcessor;
 use Intoy\HebatDatabase\Schema\PostgresBuilder;
@@ -13,37 +13,50 @@ use Intoy\HebatDatabase\Schema\PostgresBuilder;
 class PostgresConnection extends Connection
 {
     /**
-     * Bind values to their parameters in the given statement.
+     * Escape a binary value for safe SQL embedding.
      *
-     * @param  \PDOStatement  $statement
-     * @param  array  $bindings
-     * @return void
+     * @param  string  $value
+     * @return string
      */
-    public function bindValues($statement, $bindings)
+    protected function escapeBinary($value)
     {
-        foreach ($bindings as $key => $value) {
-            if (is_int($value)) {
-                $pdoParam = PDO::PARAM_INT;
-            } elseif (is_resource($value)) {
-                $pdoParam = PDO::PARAM_LOB;
-            } else {
-                $pdoParam = PDO::PARAM_STR;
-            }
+        $hex = bin2hex($value);
 
-            $statement->bindValue(
-                is_string($key) ? $key : $key + 1,
-                $value,
-                $pdoParam
-            );
-        }
+        return "'\x{$hex}'::bytea";
     }
 
     /**
-     * @return Grammar
+     * Escape a bool value for safe SQL embedding.
+     *
+     * @param  bool  $value
+     * @return string
      */
-    protected function getDefaultGrammar()
+    protected function escapeBool($value)
     {
-        return $this->withTablePrefix(new Grammar());
+        return $value ? 'true' : 'false';
+    }
+
+    /**
+     * Determine if the given database exception was caused by a unique constraint violation.
+     *
+     * @param  \Exception  $exception
+     * @return bool
+     */
+    protected function isUniqueConstraintError(\Exception $exception)
+    {
+        return '23505' === $exception->getCode();
+    }
+
+    /**
+     * Get the default query grammar instance.
+     *
+     * @return \Intoy\HebatDatabase\Query\Grammars\PostgresGrammar
+     */
+    protected function getDefaultQueryGrammar()
+    {
+        ($grammar = new QueryGrammar)->setConnection($this);
+
+        return $this->withTablePrefix($grammar);
     }
 
     /**
@@ -70,12 +83,53 @@ class PostgresConnection extends Connection
         return $this->withTablePrefix(new SchemaGrammar);
     }
 
+    /**
+     * Get the schema state for the connection.
+     *
+     * @param  mixed $files
+     * @param  callable|null  $processFactory
+     * @return mixed
+     */
+    //public function getSchemaState(Filesystem $files = null, callable $processFactory = null)
+    //{
+    //    return new PostgresSchemaState($this, $files, $processFactory);
+    //}
+
 
     /**
      * @return PostgresProcessor
      */
-    protected function getDefaultProcessor()
+    protected function getDefaultPostProcessor()
     {
         return new PostgresProcessor();
     }
+
+
+    /**
+     * Bind values to their parameters in the given statement.
+     *
+     * @param  \PDOStatement  $statement
+     * @param  array  $bindings
+     * @return void
+     */
+    /*
+    public function bindValues($statement, $bindings)
+    {
+        foreach ($bindings as $key => $value) {
+            if (is_int($value)) {
+                $pdoParam = PDO::PARAM_INT;
+            } elseif (is_resource($value)) {
+                $pdoParam = PDO::PARAM_LOB;
+            } else {
+                $pdoParam = PDO::PARAM_STR;
+            }
+
+            $statement->bindValue(
+                is_string($key) ? $key : $key + 1,
+                $value,
+                $pdoParam
+            );
+        }
+    }
+    */
 }

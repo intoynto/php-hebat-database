@@ -379,9 +379,9 @@ class Grammar extends BaseGrammar
     {
         $between = $where['not'] ? 'not between' : 'between';
 
-        $min = $this->parameter(reset($where['values']));
+        $min = $this->parameter(is_array($where['values']) ? reset($where['values']) : $where['values'][0]);
 
-        $max = $this->parameter(end($where['values']));
+        $max = $this->parameter(is_array($where['values']) ? end($where['values']) : $where['values'][1]);
 
         return $this->wrap($where['column']).' '.$between.' '.$min.' and '.$max;
     }
@@ -397,9 +397,9 @@ class Grammar extends BaseGrammar
     {
         $between = $where['not'] ? 'not between' : 'between';
 
-        $min = $this->wrap(reset($where['values']));
+        $min = $this->wrap(is_array($where['values']) ? reset($where['values']) : $where['values'][0]);
 
-        $max = $this->wrap(end($where['values']));
+        $max = $this->wrap(is_array($where['values']) ? end($where['values']) : $where['values'][1]);
 
         return $this->wrap($where['column']).' '.$between.' '.$min.' and '.$max;
     }
@@ -622,6 +622,35 @@ class Grammar extends BaseGrammar
     }
 
     /**
+     * Compile a "where JSON contains key" clause.
+     *
+     * @param  \Intoy\HebatDatabase\Query\Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function whereJsonContainsKey(Builder $query, $where)
+    {
+        $not = $where['not'] ? 'not ' : '';
+
+        return $not.$this->compileJsonContainsKey(
+            $where['column']
+        );
+    }
+
+    /**
+     * Compile a "JSON contains key" statement into SQL.
+     *
+     * @param  string  $column
+     * @return string
+     *
+     * @throws \RuntimeException
+     */
+    protected function compileJsonContainsKey($column)
+    {
+        throw new \RuntimeException('This database engine does not support JSON contains key operations.');
+    }
+
+    /**
      * Compile a "where JSON length" clause.
      *
      * @param  Builder  $query
@@ -650,6 +679,17 @@ class Grammar extends BaseGrammar
         throw new \RuntimeException('This database engine does not support JSON length operations.');
     }
 
+    /**
+     * Compile a "JSON value cast" statement into SQL.
+     *
+     * @param  string  $value
+     * @return string
+     */
+    public function compileJsonValueCast($value)
+    {
+        return $value;
+    }
+
 
     /**
      * Compile a "where fulltext" clause.
@@ -663,6 +703,19 @@ class Grammar extends BaseGrammar
     public function whereFullText(Builder $query, $where)
     {
         throw new \RuntimeException('This database engine does not support fulltext search operations.');
+    }
+
+
+    /**
+     * Compile a clause based on an expression.
+     *
+     * @param  \Intoy\HebatDatabase\Query\Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    public function whereExpression(Builder $query, $where)
+    {
+        return $where['column']->getValue($this);
     }
 
     /**
@@ -681,14 +734,13 @@ class Grammar extends BaseGrammar
      * Compile the "having" portions of the query.
      *
      * @param  Builder  $query
-     * @param  array  $havings
      * @return string
      */
-    protected function compileHavings(Builder $query, $havings)
+    protected function compileHavings(Builder $query)
     {
-        $sql = implode(' ', array_map([$this, 'compileHaving'], $havings));
-
-        return 'having '.$this->removeLeadingBoolean($sql);
+        return 'having '.$this->removeLeadingBoolean(collect($query->havings)->map(function ($having) {
+            return $having['boolean'].' '.$this->compileHaving($having);
+        })->implode(' '));
     }
 
     /**
@@ -702,13 +754,16 @@ class Grammar extends BaseGrammar
         // If the having clause is "raw", we can just return the clause straight away
         // without doing any more processing on it. Otherwise, we will compile the
         // clause into SQL based on the components that make it up from builder.
-        if ($having['type'] === 'Raw') {
-            return $having['boolean'].' '.$having['sql'];
-        } elseif ($having['type'] === 'between') {
-            return $this->compileHavingBetween($having);
-        }
-
-        return $this->compileBasicHaving($having);
+        return match ($having['type']) {
+            'Raw' => $having['sql'],
+            'between' => $this->compileHavingBetween($having),
+            'Null' => $this->compileHavingNull($having),
+            'NotNull' => $this->compileHavingNotNull($having),
+            'bit' => $this->compileHavingBit($having),
+            'Expression' => $this->compileHavingExpression($having),
+            'Nested' => $this->compileNestedHavings($having),
+            default => $this->compileBasicHaving($having),
+        };
     }
 
     /**
@@ -743,6 +798,70 @@ class Grammar extends BaseGrammar
         $max = $this->parameter(last($having['values']));
 
         return $having['boolean'].' '.$column.' '.$between.' '.$min.' and '.$max;
+    }
+
+    /**
+     * Compile a having null clause.
+     *
+     * @param  array  $having
+     * @return string
+     */
+    protected function compileHavingNull($having)
+    {
+        $column = $this->wrap($having['column']);
+
+        return $column.' is null';
+    }
+
+
+    /**
+     * Compile a having not null clause.
+     *
+     * @param  array  $having
+     * @return string
+     */
+    protected function compileHavingNotNull($having)
+    {
+        $column = $this->wrap($having['column']);
+
+        return $column.' is not null';
+    }
+
+    /**
+     * Compile a having clause involving a bit operator.
+     *
+     * @param  array  $having
+     * @return string
+     */
+    protected function compileHavingBit($having)
+    {
+        $column = $this->wrap($having['column']);
+
+        $parameter = $this->parameter($having['value']);
+
+        return '('.$column.' '.$having['operator'].' '.$parameter.') != 0';
+    }
+
+    /**
+     * Compile a having clause involving an expression.
+     *
+     * @param  array  $having
+     * @return string
+     */
+    protected function compileHavingExpression($having)
+    {
+        return $having['column']->getValue($this);
+    }
+
+    /**
+     * Compile a nested having clause.
+     *
+     * @param  array  $having
+     * @return string
+     */
+    protected function compileNestedHavings($having)
+    {
+        return '('.substr($this->compileHavings($having['query']), 7).')';
     }
 
     /**
@@ -1181,6 +1300,112 @@ class Grammar extends BaseGrammar
     }
 
     /**
+     * Wrap the given JSON selector for boolean values.
+     *
+     * @param  string  $value
+     * @return string
+     */
+    protected function wrapJsonBooleanSelector($value)
+    {
+        return $this->wrapJsonSelector($value);
+    }
+
+    /**
+     * Wrap the given JSON boolean value.
+     *
+     * @param  string  $value
+     * @return string
+     */
+    protected function wrapJsonBooleanValue($value)
+    {
+        return $value;
+    }
+
+    /**
+     * Concatenate an array of segments, removing empties.
+     *
+     * @param  array  $segments
+     * @return string
+     */
+    protected function concatenate($segments)
+    {
+        return implode(' ', array_filter($segments, function ($value) {
+            return (string) $value !== '';
+        }));
+    }
+
+
+    /**
+     * Remove the leading boolean from a statement.
+     *
+     * @param  string  $value
+     * @return string
+     */
+    protected function removeLeadingBoolean($value)
+    {
+        return preg_replace('/and |or /i', '', $value, 1);
+    }
+
+    /**
+     * Substitute the given bindings into the given raw SQL query.
+     *
+     * @param  string  $sql
+     * @param  array  $bindings
+     * @return string
+     */
+    public function substituteBindingsIntoRawSql($sql, $bindings)
+    {
+        $bindings = array_map(fn ($value) => $this->escape($value), $bindings);
+
+        $query = '';
+
+        $isStringLiteral = false;
+
+        for ($i = 0; $i < strlen($sql); $i++) {
+            $char = $sql[$i];
+            $nextChar = $sql[$i + 1] ?? null;
+
+            // Single quotes can be escaped as '' according to the SQL standard while
+            // MySQL uses \'. Postgres has operators like ?| that must get encoded
+            // in PHP like ??|. We should skip over the escaped characters here.
+            if (in_array($char.$nextChar, ["\'", "''", '??'])) {
+                $query .= $char.$nextChar;
+                $i += 1;
+            } elseif ($char === "'") { // Starting / leaving string literal...
+                $query .= $char;
+                $isStringLiteral = ! $isStringLiteral;
+            } elseif ($char === '?' && ! $isStringLiteral) { // Substitutable binding...
+                $query .= array_shift($bindings) ?? '?';
+            } else { // Normal character...
+                $query .= $char;
+            }
+        }
+
+        return $query;
+    }
+
+    /**
+     * Get the grammar specific operators.
+     *
+     * @return array
+     */
+    public function getOperators()
+    {
+        return $this->operators;
+    }
+
+
+    /**
+     * Get the grammar specific bitwise operators.
+     *
+     * @return array
+     */
+    public function getBitwiseOperators()
+    {
+        return $this->bitwiseOperators;
+    }
+
+    /**
      * Wrap a value in keyword identifiers.
      *
      * @param  Expression|string  $value
@@ -1218,32 +1443,10 @@ class Grammar extends BaseGrammar
      *
      * @throws \RuntimeException
      */
-    protected function wrapJsonSelector($value)
-    {
-        throw new \RuntimeException('This database engine does not support JSON operations.');
-    }
-
-    /**
-     * Wrap the given JSON selector for boolean values.
-     *
-     * @param  string  $value
-     * @return string
-     */
-    protected function wrapJsonBooleanSelector($value)
-    {
-        return $this->wrapJsonSelector($value);
-    }
-
-    /**
-     * Wrap the given JSON boolean value.
-     *
-     * @param  string  $value
-     * @return string
-     */
-    protected function wrapJsonBooleanValue($value)
-    {
-        return $value;
-    }
+    //protected function wrapJsonSelector($value)
+    //{
+    //    throw new \RuntimeException('This database engine does not support JSON operations.');
+    //}  
 
     /**
      * Split the given JSON selector into the field and the optional path and wrap them separately.
@@ -1251,16 +1454,16 @@ class Grammar extends BaseGrammar
      * @param  string  $column
      * @return array
      */
-    protected function wrapJsonFieldAndPath($column)
-    {
-        $parts = explode('->', $column, 2);
+    //protected function wrapJsonFieldAndPath($column)
+    //{
+    //    $parts = explode('->', $column, 2);
 
-        $field = $this->wrap($parts[0]);
+    //    $field = $this->wrap($parts[0]);
 
-        $path = count($parts) > 1 ? ', '.$this->wrapJsonPath($parts[1], '->') : '';
+    //    $path = count($parts) > 1 ? ', '.$this->wrapJsonPath($parts[1], '->') : '';
 
-        return [$field, $path];
-    }
+    //    return [$field, $path];
+    //}
 
     /**
      * Wrap the given JSON path.
@@ -1269,12 +1472,12 @@ class Grammar extends BaseGrammar
      * @param  string  $delimiter
      * @return string
      */
-    protected function wrapJsonPath($value, $delimiter = '->')
-    {
-        $value = preg_replace("/([\\\\]+)?\\'/", "''", $value);
+    //protected function wrapJsonPath($value, $delimiter = '->')
+    //{
+    //    $value = preg_replace("/([\\\\]+)?\\'/", "''", $value);
 
-        return '\'$."'.str_replace($delimiter, '"."', $value).'"\'';
-    }
+    //    return '\'$."'.str_replace($delimiter, '"."', $value).'"\'';
+    //}
 
     /**
      * Determine if the given string is a JSON selector.
@@ -1282,52 +1485,8 @@ class Grammar extends BaseGrammar
      * @param  string  $value
      * @return bool
      */
-    protected function isJsonSelector($value)
-    {
-        return Str::contains($value, '->');
-    }
-
-    /**
-     * Concatenate an array of segments, removing empties.
-     *
-     * @param  array  $segments
-     * @return string
-     */
-    protected function concatenate($segments)
-    {
-        return implode(' ', array_filter($segments, function ($value) {
-            return (string) $value !== '';
-        }));
-    }
-
-    /**
-     * Remove the leading boolean from a statement.
-     *
-     * @param  string  $value
-     * @return string
-     */
-    protected function removeLeadingBoolean($value)
-    {
-        return preg_replace('/and |or /i', '', $value, 1);
-    }
-
-    /**
-     * Get the grammar specific operators.
-     *
-     * @return array
-     */
-    public function getOperators()
-    {
-        return $this->operators;
-    }
-
-    /**
-     * Get the grammar specific bitwise operators.
-     *
-     * @return array
-     */
-    public function getBitwiseOperators()
-    {
-        return $this->bitwiseOperators;
-    }
+    //protected function isJsonSelector($value)
+    //{
+    //    return Str::contains($value, '->');
+    //}
 }

@@ -11,6 +11,13 @@ abstract class Grammar
     use Macroable;
 
     /**
+     * The connection used for escaping values.
+     *
+     * @var \Intoy\HebatDatabase\Connection
+     */
+    protected $connection;
+
+    /**
      * Grambar table prefix
      * @var string 
      */
@@ -61,6 +68,13 @@ abstract class Grammar
         // own, and then join these both back together using the "as" connector.
         if (stripos($value, ' as ') !== false) {
             return $this->wrapAliasedValue($value, $prefixAlias);
+        }
+
+        // If the given value is a JSON selector we will wrap it differently than a
+        // traditional value. We will need to split this path and wrap each part
+        // wrapped, etc. Otherwise, we will simply wrap the value as a string.
+        if ($this->isJsonSelector($value)) {
+            return $this->wrapJsonSelector($value);
         }
 
         return $this->wrapSegments(explode('.', $value));
@@ -119,6 +133,31 @@ abstract class Grammar
     }
 
     /**
+     * Wrap the given JSON selector.
+     *
+     * @param  string  $value
+     * @return string
+     *
+     * @throws \RuntimeException
+     */
+    protected function wrapJsonSelector($value)
+    {
+        throw new \RuntimeException('This database engine does not support JSON operations.');
+    }
+
+
+    /**
+     * Determine if the given string is a JSON selector.
+     *
+     * @param  string  $value
+     * @return bool
+     */
+    protected function isJsonSelector($value)
+    {
+        return str_contains($value, '->');
+    }
+
+    /**
      * Convert an array of column names into a delimited string.
      *
      * @param  array  $columns
@@ -169,6 +208,21 @@ abstract class Grammar
         return "'$value'";
     }
 
+    /**
+     * Escapes a value for safe SQL embedding.
+     *
+     * @param  string|float|int|bool|null  $value
+     * @param  bool  $binary
+     * @return string
+     */
+    public function escape($value, $binary = false)
+    {
+        if (is_null($this->connection)) {
+            throw new \RuntimeException("The database driver's grammar implementation does not support escaping values.");
+        }
+
+        return $this->connection->escape($value, $binary);
+    }
 
     /**
      * Determine if the given value is a raw expression.
@@ -190,7 +244,11 @@ abstract class Grammar
      */
     public function getValue($expression)
     {
-        return $expression->getValue();
+        if ($this->isExpression($expression)) {
+            return $this->getValue($expression->getValue($this));
+        }
+
+        return $expression;
     }
 
 
@@ -224,6 +282,20 @@ abstract class Grammar
     public function setTablePrefix($prefix)
     {
         $this->tablePrefix = $prefix;
+
+        return $this;
+    }
+
+
+    /**
+     * Set the grammar's database connection.
+     *
+     * @param  \Intoy\HebatDatabase\Connection  $prefix
+     * @return $this
+     */
+    public function setConnection($connection)
+    {
+        $this->connection = $connection;
 
         return $this;
     }
