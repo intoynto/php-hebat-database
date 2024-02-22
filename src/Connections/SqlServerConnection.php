@@ -14,7 +14,7 @@ class SqlServerConnection extends Connection
     /**
      * @return Grammar
      */
-    protected function getDefaultGrammar()
+    protected function getDefaultQueryGrammar()
     {
         return $this->withTablePrefix(new Grammar());
     }
@@ -46,7 +46,7 @@ class SqlServerConnection extends Connection
     /**
      * @return SqlServerProcessor
      */
-    protected function getDefaultProcessor()
+    protected function getDefaultPostProcessor()
     {
         return new SqlServerProcessor();
     }

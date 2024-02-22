@@ -25,7 +25,7 @@ class MySqlConnection extends Connection
     /**
      * @return Grammar
      */
-    protected function getDefaultGrammar()
+    protected function getDefaultQueryGrammar()
     {
         return $this->withTablePrefix(new Grammar());
     }
@@ -59,7 +59,7 @@ class MySqlConnection extends Connection
     /**
      * @return MySqlProcessor
      */
-    protected function getDefaultProcessor()
+    protected function getDefaultPostProcessor()
     {
         return new MySqlProcessor();
     }
