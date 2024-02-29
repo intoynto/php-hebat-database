@@ -309,10 +309,26 @@ class PostgresGrammar extends Grammar
      * @param  string  $sequence
      * @return string
      */
-    public function compileInsertGetId(Builder $query, $values, $sequence)
-    {
-        return $this->compileInsert($query, $values).' returning '.$this->wrap($sequence ?: 'id');
-    }
+
+    // ===========================
+    // SCRIPT MODIFY
+    // ===========================
+
+    //public function compileInsertGetId(Builder $query, $values, $sequence) // m
+    //{ 
+    //    return $this->compileInsert($query, $values).' returning '.$this->wrap($sequence ?: 'id'); // m
+    //} 
+    public function compileInsertGetId(Builder $query, $values, $sequence) 
+    { 
+        $sql=$this->compileInsert($query, $values);
+
+        if(!is_null($sequence))
+        {
+            $sql.=' returning '.$this->wrap($sequence?:'id');
+        }
+
+        return $sql; 
+    } 
 
     /**
      * Compile an update statement into SQL.
